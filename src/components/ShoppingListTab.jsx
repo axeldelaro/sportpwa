@@ -1,22 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Trash2,
   Check,
   ArrowLeftRight,
   Search,
+  Globe,
 } from 'lucide-react';
 import {
   AISLE_CATEGORIES,
-  FOOD_DATABASE,
+  getAllFoods,
   getFoodById,
   calculateFoodMacros,
   isFoodCompatibleWithProfile,
 } from '../data/foodDatabase';
 import { normalizeText } from '../utils/substitutionEngine';
+import { searchOpenFoodFacts } from '../utils/openFoodFactsService';
+import { tr } from '../i18n/translations';
 
 export default function ShoppingListTab({
   shoppingItems = [],
+  lang = 'fr',
   profile,
   onToggleItemChecked,
   onUpdateItemGrams,
@@ -29,9 +33,11 @@ export default function ShoppingListTab({
   onGenerateFromToday,
   onGenerateFromWeek,
   onOpenSubstitutionModal,
+  onCacheExternalFood,
 }) {
   const [query, setQuery] = useState('');
-  const [selectedFoodId, setSelectedFoodId] = useState('');
+  const [selectedFoodObj, setSelectedFoodObj] = useState(null);
+  const [remoteFoods, setRemoteFoods] = useState([]);
   const [gramsInput, setGramsInput] = useState(150);
   const [toast, setToast] = useState(null);
 
@@ -41,17 +47,41 @@ export default function ShoppingListTab({
   };
 
   const compatibleFoods = useMemo(
-    () => FOOD_DATABASE.filter((f) => isFoodCompatibleWithProfile(f, profile)),
+    () => getAllFoods().filter((f) => isFoodCompatibleWithProfile(f, profile)),
     [profile]
   );
 
-  const matchingFoods = useMemo(() => {
+  const matchingLocalFoods = useMemo(() => {
     if (!query.trim()) return compatibleFoods.slice(0, 7);
     const q = normalizeText(query);
     return compatibleFoods
       .filter((f) => normalizeText(f.name).includes(q))
-      .slice(0, 8);
+      .slice(0, 6);
   }, [compatibleFoods, query]);
+
+  // Suggestions live Open Food Facts dans la barre des courses si peu de résultats locaux
+  useEffect(() => {
+    if (query.trim().length < 3) {
+      setRemoteFoods([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchOpenFoodFacts(query.trim(), lang, controller.signal);
+        setRemoteFoods(
+          res.filter((f) => isFoodCompatibleWithProfile(f, profile)).slice(0, 5)
+        );
+      } catch {
+        // Hors-ligne
+      }
+    }, 450);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, lang, profile]);
 
   const uncheckedCount = shoppingItems.filter((i) => !i.checked).length;
   const checkedCount = shoppingItems.length - uncheckedCount;
@@ -76,36 +106,47 @@ export default function ShoppingListTab({
     return map;
   }, [shoppingItems]);
 
-  const handleSmartSubmit = (e) => {
+  const handleSmartSubmit = async (e) => {
     e.preventDefault();
     const trimmed = query.trim();
 
-    if (selectedFoodId) {
-      const food = getFoodById(selectedFoodId);
-      if (food) {
-        const g = Math.max(5, Math.round(Number(gramsInput) || food.defaultGrams || 100));
-        onAddFoodItem(food.id, g);
-        setQuery('');
-        setSelectedFoodId('');
-        showToast(`${g}g ${food.name} ajouté`);
-        return;
+    if (selectedFoodObj) {
+      if (selectedFoodObj.sourceRef === 'Open Food Facts') {
+        await onCacheExternalFood(selectedFoodObj);
       }
+      const g = Math.max(
+        5,
+        Math.round(Number(gramsInput) || selectedFoodObj.defaultGrams || 100)
+      );
+      onAddFoodItem(selectedFoodObj.id, g);
+      setQuery('');
+      setSelectedFoodObj(null);
+      showToast(`+${g}g ${selectedFoodObj.name}`);
+      return;
     }
 
     if (!trimmed) return;
 
-    // Si la saisie correspond à un aliment de la base, on l'ajoute avec ses macros & équivalences
-    if (matchingFoods.length > 0 && normalizeText(matchingFoods[0].name).includes(normalizeText(trimmed))) {
-      const food = matchingFoods[0];
+    if (
+      matchingLocalFoods.length > 0 &&
+      normalizeText(matchingLocalFoods[0].name).includes(normalizeText(trimmed))
+    ) {
+      const food = matchingLocalFoods[0];
       const g = Math.max(5, Math.round(Number(gramsInput) || food.defaultGrams || 100));
       onAddFoodItem(food.id, g);
       setQuery('');
-      showToast(`${g}g ${food.name} ajouté`);
+      showToast(`+${g}g ${food.name}`);
+    } else if (remoteFoods.length > 0) {
+      const food = remoteFoods[0];
+      await onCacheExternalFood(food);
+      const g = Math.max(5, Math.round(Number(gramsInput) || food.defaultGrams || 100));
+      onAddFoodItem(food.id, g);
+      setQuery('');
+      showToast(`+${g}g ${food.name}`);
     } else {
-      // Sinon ajout libre dans Épicerie
       onAddCustomTextItem(trimmed, AISLE_CATEGORIES[4]);
       setQuery('');
-      showToast(`${trimmed} ajouté`);
+      showToast(`${trimmed}`);
     }
   };
 
@@ -117,27 +158,31 @@ export default function ShoppingListTab({
       contextLabel: item.food.category,
       onConfirmSwap: ({ newFood, newGrams }) => {
         onSwapShoppingItem(item.id, newFood.id, newGrams);
-        showToast(`Échangé : ${newGrams}g ${newFood.name}`);
+        showToast(`→ ${newGrams}g ${newFood.name}`);
       },
     });
   };
 
+  const combinedPills = [...matchingLocalFoods, ...remoteFoods].slice(0, 9);
+
   return (
     <div className="space-y-4 pb-8 animate-fade-in">
       {toast && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-zinc-100 text-zinc-950 text-xs font-semibold shadow-xl flex items-center gap-1.5 animate-slide-up">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-emerald-400 text-zinc-950 text-xs font-semibold shadow-xl flex items-center gap-1.5 animate-slide-up">
           <Check className="w-3.5 h-3.5" />
           {toast}
         </div>
       )}
 
-      {/* En-tête minimaliste + Génération 1 clic */}
+      {/* En-tête */}
       <div className="flex items-center justify-between px-1">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-50">Courses</h1>
-          <p className="text-xs text-zinc-500 tabular-nums">
-            {uncheckedCount} à acheter
-            {checkedCount > 0 ? ` · ${checkedCount} dans le panier` : ''}
+          <h1 className="text-lg font-semibold text-[var(--text-primary)]">
+            {tr(lang, 'shopping_title')}
+          </h1>
+          <p className="text-xs text-[var(--text-muted)] tabular-nums">
+            {uncheckedCount} {tr(lang, 'to_buy')}
+            {checkedCount > 0 ? ` · ${checkedCount} ${tr(lang, 'in_cart')}` : ''}
           </p>
         </div>
 
@@ -146,43 +191,43 @@ export default function ShoppingListTab({
             type="button"
             onClick={async () => {
               const count = await onGenerateFromToday();
-              showToast(count > 0 ? 'Repas du jour importés' : "Aucun repas aujourd'hui");
+              showToast(count > 0 ? 'Importé' : '0 repas');
             }}
-            className="px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-white/[0.07] text-xs font-medium text-zinc-200 transition-colors"
+            className="px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
           >
-            + Aujourd’hui
+            {tr(lang, 'from_today')}
           </button>
           <button
             type="button"
             onClick={async () => {
               const count = await onGenerateFromWeek();
-              showToast(count > 0 ? 'Semaine agrégée' : 'Aucun repas planifié sur 7j');
+              showToast(count > 0 ? 'Semaine importée' : '0 repas sur 7j');
             }}
-            className="px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-white/[0.07] text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
-            + 7 jours
+            {tr(lang, 'from_week')}
           </button>
         </div>
       </div>
 
-      {/* Barre d'ajout unifiée et épurée */}
+      {/* Barre d'ajout intelligente CIQUAL + Open Food Facts */}
       <section className="card-surface p-4 space-y-2.5">
         <form onSubmit={handleSmartSubmit} className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                setSelectedFoodId('');
+                setSelectedFoodObj(null);
               }}
-              placeholder="Ajouter un aliment ou un article..."
+              placeholder={tr(lang, 'search_food_world')}
               className="input-dark !pl-9 !py-2 text-xs"
             />
           </div>
 
-          <div className="inline-flex items-center bg-zinc-950/80 border border-white/[0.08] rounded-2xl px-2.5 py-2 shrink-0">
+          <div className="inline-flex items-center bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-2xl px-2.5 py-2 shrink-0">
             <input
               type="number"
               min="5"
@@ -190,57 +235,56 @@ export default function ShoppingListTab({
               step="5"
               value={gramsInput}
               onChange={(e) => setGramsInput(e.target.value)}
-              className="w-12 bg-transparent text-right text-xs font-semibold text-zinc-200 tabular-nums focus:outline-none"
-              title="Quantité en grammes"
+              className="w-12 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
             />
-            <span className="text-[11px] text-zinc-500 ml-1">g</span>
+            <span className="text-[11px] text-[var(--text-muted)] ml-1">g</span>
           </div>
 
           <button
             type="submit"
-            className="w-9 h-9 rounded-full bg-zinc-100 hover:bg-white text-zinc-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
+            className="w-9 h-9 rounded-full bg-emerald-400 text-zinc-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
             aria-label="Ajouter"
           >
             <Plus className="w-4 h-4" />
           </button>
         </form>
 
-        {/* Suggestions instantanées */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {matchingFoods.map((f) => {
-            const isSel = selectedFoodId === f.id;
+          {combinedPills.map((f) => {
+            const isSel = selectedFoodObj?.id === f.id;
+            const isOnline = f.sourceRef === 'Open Food Facts';
             return (
               <button
                 key={f.id}
                 type="button"
                 onClick={() => {
-                  setSelectedFoodId(f.id);
+                  setSelectedFoodObj(f);
                   setQuery(f.name);
                   setGramsInput(f.defaultGrams || 150);
                 }}
-                className={`px-2.5 py-1 rounded-full text-[11px] whitespace-nowrap transition-all ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] whitespace-nowrap transition-all ${
                   isSel
                     ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                    : 'bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 border border-white/[0.05]'
+                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                 }`}
               >
-                {f.name}
+                {isOnline && <Globe className="w-2.5 h-2.5 text-emerald-400" />}
+                <span>{f.name}</span>
               </button>
             );
           })}
         </div>
       </section>
 
-      {/* Actions de nettoyage discrètes */}
       {shoppingItems.length > 0 && (
         <div className="flex items-center justify-end gap-4 px-1 text-xs">
           {checkedCount > 0 && (
             <button
               type="button"
               onClick={onClearCheckedItems}
-              className="text-emerald-400 hover:text-emerald-300 font-medium"
+              className="text-emerald-400 font-medium"
             >
-              Retirer les cochés ({checkedCount})
+              {tr(lang, 'clear_checked')} ({checkedCount})
             </button>
           )}
           <button
@@ -248,19 +292,20 @@ export default function ShoppingListTab({
             onClick={() => {
               if (window.confirm('Vider toute la liste ?')) onClearAllItems();
             }}
-            className="text-zinc-500 hover:text-rose-400"
+            className="text-[var(--text-muted)] hover:text-rose-400"
           >
-            Tout vider
+            {tr(lang, 'clear_all')}
           </button>
         </div>
       )}
 
-      {/* Liste par Rayons */}
       {shoppingItems.length === 0 ? (
         <div className="card-surface p-10 text-center space-y-1.5">
-          <p className="text-sm font-medium text-zinc-300">Aucun article pour le moment</p>
-          <p className="text-xs text-zinc-500">
-            Importe tes repas en un clic ou cherche un aliment ci-dessus.
+          <p className="text-sm font-medium text-[var(--text-secondary)]">
+            Liste vide
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            Importe tes repas ou recherche n’importe quel aliment ci-dessus.
           </p>
         </div>
       ) : (
@@ -271,14 +316,16 @@ export default function ShoppingListTab({
 
             return (
               <section key={aisle} className="card-surface overflow-hidden">
-                <div className="px-5 py-3 border-b border-white/[0.04] flex items-center justify-between">
-                  <h2 className="text-xs font-semibold text-zinc-400">{aisle}</h2>
-                  <span className="text-[11px] text-zinc-600 tabular-nums">
+                <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                  <h2 className="text-xs font-semibold text-[var(--text-secondary)]">
+                    {aisle}
+                  </h2>
+                  <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
                     {items.filter((i) => !i.checked).length}
                   </span>
                 </div>
 
-                <div className="divide-y divide-white/[0.04]">
+                <div className="divide-y divide-[var(--border-subtle)]">
                   {items.map((item) => {
                     const macros = item.food
                       ? calculateFoodMacros(item.food, item.grams)
@@ -298,7 +345,7 @@ export default function ShoppingListTab({
                             className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-all ${
                               item.checked
                                 ? 'bg-emerald-400 border-emerald-400 text-zinc-950'
-                                : 'border-zinc-600 hover:border-zinc-400'
+                                : 'border-zinc-500/50 hover:border-emerald-400'
                             }`}
                             aria-label="Cocher"
                           >
@@ -310,21 +357,21 @@ export default function ShoppingListTab({
                               <span
                                 className={`text-sm font-medium ${
                                   item.checked
-                                    ? 'line-through text-zinc-500'
-                                    : 'text-zinc-100'
+                                    ? 'line-through text-[var(--text-muted)]'
+                                    : 'text-[var(--text-primary)]'
                                 }`}
                               >
                                 {item.food ? item.food.name : item.customName}
                               </span>
                               {item.food && (
-                                <span className="text-[11px] text-zinc-500">
+                                <span className="text-[11px] text-[var(--text-muted)]">
                                   ({item.food.state})
                                 </span>
                               )}
                             </div>
 
                             {macros && !item.checked && (
-                              <p className="text-[11px] text-zinc-500 tabular-nums">
+                              <p className="text-[11px] text-[var(--text-muted)] tabular-nums">
                                 {macros.kcal} kcal · {macros.protein}g P · {macros.carbs}g G ·{' '}
                                 {macros.fat}g L
                               </p>
@@ -335,7 +382,7 @@ export default function ShoppingListTab({
                         <div className="flex items-center gap-2 shrink-0">
                           {item.food && !item.checked && (
                             <>
-                              <div className="inline-flex items-center bg-zinc-950/70 rounded-xl px-2 py-1 border border-white/[0.06]">
+                              <div className="inline-flex items-center bg-[var(--bg-subtle)] rounded-xl px-2 py-1 border border-[var(--border-subtle)]">
                                 <input
                                   type="number"
                                   min="5"
@@ -345,19 +392,18 @@ export default function ShoppingListTab({
                                   onChange={(e) =>
                                     onUpdateItemGrams(item.id, e.target.value)
                                   }
-                                  className="w-12 bg-transparent text-right text-xs font-semibold text-zinc-200 tabular-nums focus:outline-none"
+                                  className="w-12 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
                                 />
-                                <span className="text-[10px] text-zinc-500 ml-0.5">g</span>
+                                <span className="text-[10px] text-[var(--text-muted)] ml-0.5">g</span>
                               </div>
 
                               <button
                                 type="button"
                                 onClick={() => handleOpenSwapForItem(item)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-xs font-medium text-emerald-400 transition-colors"
-                                title="Remplacer par un aliment équivalent"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-emerald-400 transition-colors"
                               >
                                 <ArrowLeftRight className="w-3 h-3" />
-                                <span className="hidden xs:inline">Échanger</span>
+                                <span className="hidden xs:inline">{tr(lang, 'swap')}</span>
                               </button>
                             </>
                           )}
@@ -365,8 +411,7 @@ export default function ShoppingListTab({
                           <button
                             type="button"
                             onClick={() => onDeleteItem(item.id)}
-                            className="p-1 text-zinc-600 hover:text-rose-400 transition-colors"
-                            aria-label="Supprimer"
+                            className="p-1 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

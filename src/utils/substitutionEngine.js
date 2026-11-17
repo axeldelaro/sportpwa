@@ -1,6 +1,7 @@
 import {
   FOOD_DATABASE,
   SWAP_GROUP_META,
+  getAllFoods,
   getFoodById,
   calculateFoodMacros,
   isFoodCompatibleWithProfile,
@@ -80,7 +81,7 @@ export function computeSubstitutions(
     groupMeta.relatedGroups.forEach((g) => allowedGroups.add(g));
   }
 
-  const candidates = FOOD_DATABASE.filter((candidate) => {
+  const candidates = getAllFoods().filter((candidate) => {
     if (candidate.id === sourceFood.id) return false;
     if (!allowedGroups.has(candidate.swapGroup)) return false;
     if (!isFoodCompatibleWithProfile(candidate, profile)) return false;

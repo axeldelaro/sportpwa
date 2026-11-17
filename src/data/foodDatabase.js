@@ -1603,7 +1603,28 @@ export const FOOD_DATABASE = [
   },
 ];
 
-const FOOD_MAP = new Map(FOOD_DATABASE.map((f) => [f.id, f]));
+const FOOD_MAP = new Map(
+  FOOD_DATABASE.map((f) => [f.id, { ...f, sourceRef: 'ANSES CIQUAL / USDA' }])
+);
+const EXTERNAL_FOOD_LIST = [];
+
+export function registerExternalFoods(foods = []) {
+  const list = Array.isArray(foods) ? foods : [foods];
+  for (const f of list) {
+    if (!f?.id || !f?.per100g) continue;
+    FOOD_MAP.set(f.id, f);
+    const existingIdx = EXTERNAL_FOOD_LIST.findIndex((x) => x.id === f.id);
+    if (existingIdx >= 0) {
+      EXTERNAL_FOOD_LIST[existingIdx] = f;
+    } else {
+      EXTERNAL_FOOD_LIST.push(f);
+    }
+  }
+}
+
+export function getAllFoods() {
+  return [...FOOD_DATABASE, ...EXTERNAL_FOOD_LIST];
+}
 
 export function getFoodById(foodId) {
   return FOOD_MAP.get(foodId) || null;

@@ -1,13 +1,15 @@
 // Persistance 100% locale hybride : localStorage + IndexedDB (Wrapper natif basé sur les Promises)
 
 const DB_NAME = 'pulsefit_local_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const LS_KEYS = {
   PROFILE: 'pulsefit_profile_v1',
   HYDRATION: 'pulsefit_hydration_v1',
   THEME: 'pulsefit_theme_v1',
+  LANG: 'pulsefit_lang_v1',
   ACTIVE_WORKOUT: 'pulsefit_active_workout_v1',
+  CLOUD_VAULT_META: 'pulsefit_cloud_vault_meta_v1',
 };
 
 export const ACTIVITY_LEVELS = [
@@ -220,6 +222,25 @@ export function saveTheme(theme) {
   }
 }
 
+export function loadLanguage() {
+  try {
+    const saved = localStorage.getItem(LS_KEYS.LANG);
+    if (saved && ['fr', 'en', 'es'].includes(saved)) return saved;
+    const browserLang = (navigator.language || 'fr').slice(0, 2).toLowerCase();
+    return ['fr', 'en', 'es'].includes(browserLang) ? browserLang : 'fr';
+  } catch {
+    return 'fr';
+  }
+}
+
+export function saveLanguage(lang) {
+  try {
+    localStorage.setItem(LS_KEYS.LANG, lang);
+  } catch {
+    // Ignore
+  }
+}
+
 export function loadActiveWorkoutSession() {
   try {
     const raw = localStorage.getItem(LS_KEYS.ACTIVE_WORKOUT);
@@ -283,6 +304,10 @@ export function openDatabase() {
 
       if (!db.objectStoreNames.contains('bodyMetrics')) {
         db.createObjectStore('bodyMetrics', { keyPath: 'date' });
+      }
+
+      if (!db.objectStoreNames.contains('cachedFoods')) {
+        db.createObjectStore('cachedFoods', { keyPath: 'id' });
       }
     };
 
@@ -494,6 +519,18 @@ export async function saveBodyMetricEntry(entry) {
   return record;
 }
 
+// --- Aliments Externes Mis en Cache (Open Food Facts / Code-barres) ---
+export async function getAllCachedFoods() {
+  const list = await withStore('cachedFoods', 'readonly', (store) => store.getAll());
+  return list || [];
+}
+
+export async function saveCachedFood(foodObj) {
+  if (!foodObj?.id) return null;
+  await withStore('cachedFoods', 'readwrite', (store) => store.put(foodObj));
+  return foodObj;
+}
+
 // ==========================================
 // SAUVEGARDE PORTABLE EXPORT / IMPORT JSON
 // ==========================================
@@ -507,6 +544,7 @@ export async function exportFullBackupData() {
     customWorkouts,
     coachMessages,
     bodyMetrics,
+    cachedFoods,
   ] = await Promise.all([
     getAllWorkoutHistory(),
     getAllNutritionLogs(),
@@ -515,6 +553,7 @@ export async function exportFullBackupData() {
     getCustomWorkouts(),
     getCoachMessages(),
     getBodyMetricsHistory(),
+    getAllCachedFoods(),
   ]);
 
   let hydrationMap = {};
@@ -526,12 +565,13 @@ export async function exportFullBackupData() {
 
   return {
     app: 'PulseFit PWA',
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     localStorage: {
       profile: loadProfile(),
       hydration: hydrationMap,
       theme: loadTheme(),
+      lang: loadLanguage(),
     },
     indexedDB: {
       workoutHistory,
@@ -541,6 +581,7 @@ export async function exportFullBackupData() {
       customWorkouts,
       coachMessages,
       bodyMetrics,
+      cachedFoods,
     },
   };
 }
@@ -559,6 +600,9 @@ export async function importFullBackupData(payload) {
   if (payload.localStorage?.theme) {
     saveTheme(payload.localStorage.theme);
   }
+  if (payload.localStorage?.lang) {
+    saveLanguage(payload.localStorage.lang);
+  }
 
   const db = await openDatabase();
   const storeNames = [
@@ -569,6 +613,7 @@ export async function importFullBackupData(payload) {
     'customWorkouts',
     'coachMessages',
     'bodyMetrics',
+    'cachedFoods',
   ];
 
   await new Promise((resolve, reject) => {

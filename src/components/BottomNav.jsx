@@ -6,28 +6,30 @@ import {
   ShoppingBag,
   Sparkles,
 } from 'lucide-react';
-
-const NAV_TABS = [
-  { id: 'dashboard', label: 'Aujourd’hui', icon: Activity },
-  { id: 'workouts', label: 'Séances', icon: Dumbbell },
-  { id: 'nutrition', label: 'Repas', icon: Utensils },
-  { id: 'shopping', label: 'Courses', icon: ShoppingBag },
-  { id: 'coach', label: 'Coach', icon: Sparkles },
-];
+import { tr } from '../i18n/translations';
 
 export default function BottomNav({
   activeTab,
+  lang = 'fr',
   onChangeTab,
   uncheckedShoppingCount = 0,
   hasActiveWorkout = false,
 }) {
+  const navTabs = [
+    { id: 'dashboard', label: tr(lang, 'nav_today'), icon: Activity },
+    { id: 'workouts', label: tr(lang, 'nav_workouts'), icon: Dumbbell },
+    { id: 'nutrition', label: tr(lang, 'nav_meals'), icon: Utensils },
+    { id: 'shopping', label: tr(lang, 'nav_shopping'), icon: ShoppingBag },
+    { id: 'coach', label: tr(lang, 'nav_coach'), icon: Sparkles },
+  ];
+
   return (
     <nav
       aria-label="Navigation principale"
-      className="fixed bottom-0 inset-x-0 z-30 bg-zinc-950/85 backdrop-blur-2xl border-t border-white/[0.05] pb-safe"
+      className="fixed bottom-0 inset-x-0 z-30 bg-[var(--bg-app)]/85 backdrop-blur-2xl border-t border-[var(--border-subtle)] pb-safe"
     >
       <div className="max-w-xl mx-auto px-3 h-16 grid grid-cols-5 items-center">
-        {NAV_TABS.map((tab) => {
+        {navTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
 
@@ -38,8 +40,8 @@ export default function BottomNav({
               onClick={() => onChangeTab(tab.id)}
               className={`relative flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-200 ${
                 isActive
-                  ? 'text-zinc-50'
-                  : 'text-zinc-500 hover:text-zinc-300 active:scale-95'
+                  ? 'text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] active:scale-95'
               }`}
             >
               <div className="relative">
@@ -50,7 +52,7 @@ export default function BottomNav({
                 />
 
                 {tab.id === 'shopping' && uncheckedShoppingCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-zinc-100 text-zinc-950 text-[9.5px] font-bold flex items-center justify-center tabular-nums">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-emerald-400 text-zinc-950 text-[9.5px] font-bold flex items-center justify-center tabular-nums">
                     {uncheckedShoppingCount > 99 ? '99' : uncheckedShoppingCount}
                   </span>
                 )}
@@ -62,7 +64,7 @@ export default function BottomNav({
 
               <span
                 className={`text-[10px] mt-1 tracking-tight ${
-                  isActive ? 'font-semibold text-zinc-100' : 'font-medium'
+                  isActive ? 'font-semibold text-[var(--text-primary)]' : 'font-medium'
                 }`}
               >
                 {tab.label}

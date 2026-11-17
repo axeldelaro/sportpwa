@@ -1,53 +1,38 @@
-# PulseFit — PWA Universelle de Coaching Sportif & Nutritionnel (100 % Locale)
+# PulseFit V2 — PWA Coaching Sportif, Nutrition Scientifique, IA Locale & Cloud Chiffré GitHub
 
-**PulseFit** est une Progressive Web App (PWA) mobile-first au design épuré, conçue pour le coaching sportif, le suivi nutritionnel au gramme près, la gestion intelligente de liste de courses et le calcul mathématique d'équivalences nutritionnelles — **sans serveur distant, sans compte cloud et sans API externe payante**.
+**PulseFit** est une Progressive Web App (PWA) mobile-first au design minimaliste haute couture, intégrant un **Coach IA illimité** (RAG scientifique + vrai modèle LLM neural dans le navigateur), une recherche nutritionnelle sur **plus de 3 millions d'aliments**, un moteur mathématique d'équivalences et un **système de compte et sauvegarde Cloud chiffré de bout en bout (`AES-256-GCM`) reposant 100 % sur GitHub**.
 
+- **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa
-- **Application Web / PWA (GitHub Pages) :** https://axeldelaro.github.io/sportpwa/
 
 ---
 
-## Points Forts
+## Nouveautés Majeures V2
 
-- **Interface Minimaliste & Moderne :** Design system sombre épuré (`Zinc-950` + option **Noir OLED**), hiérarchie claire sans surcharge visuelle, ergonomie au pouce à 5 onglets.
-- **Profil Universel (Mifflin-St Jeor) & Allergies Dynamiques :** Calcul instantané BMR / TDEE / Macros / Eau selon votre objectif (*Perte de gras*, *Maintien*, *Prise de muscle*) + filtres d'exclusions automatiques (`Végétarien`, `Vegan`, `Sans lactose`, `Sans gluten`, `Sans œufs`, `Sans fruits à coque`, `Sans porc`, `Sans poissons/crustacés`, `Digestion sensible`).
-- **Base Nutritionnelle de 151 Aliments & 40 Recettes Équilibrées :** Distinction stricte des grammages *cru*, *cuit* ou *prêt à consommer*, portions ajustables (`0.5x`, `1x`, `1.5x`, `2x`) et création de recettes sur-mesure.
-- **Liste de Courses Intelligente & Moteur d'Équivalences :** Agrégation automatique sur 1 ou 7 jours par rayon, et remplacement instantané en **Mode Macro Dominante** ou **Mode Iso-Calorique** (arrondi à `5g` près + calcul du delta net).
-- **7 Programmes Sportifs Complets + Lecteur Actif :** *Full Body Poids du Corps*, *Push/Pull/Legs*, *Upper/Lower*, *Haltères & Kettlebell Maison*, *Focus Fessiers/Jambes & Core*, *HIIT & Core 20 min*, *Mobilité & McGill*. Chronomètre d'effort et de repos automatique avec bips **Web Audio API**, modulation d'intensité et anti-perte au rechargement.
-- **Coach IA 100 % Local :** Connecté en temps réel à vos macros restantes, votre hydratation et vos filtres alimentaires, fonctionnant intégralement hors-ligne.
+1. **Double Moteur IA Conversationnel Illimité & 100 % Gratuit :**
+   - **LLM Neural Embarqué (`Qwen2.5-0.5B-Instruct` via WebGPU / WebAssembly)** : s'exécute directement dans votre navigateur dans un Web Worker dédié avec génération *streaming* mot par mot, zéro clé API et usage illimité.
+   - **RAG Scientifique Instantané (`ISSN`, `ACSM`, `IOC`, `BJSM`, `PubMed`)** : chaque conseil s'appuie sur de vraies méta-analyses et consensus internationaux (Morton et al. 2018, Jäger et al. 2017, Schoenfeld et al. 2017, Kreider et al. 2017, Helms et al. 2014, McGill 2010...) avec liens cliquables vers les études PubMed.
+
+2. **Recherche Alimentaire Universelle (3M+ Produits) + Sources Officielles :**
+   - Socle hors-ligne certifié **ANSES CIQUAL / USDA** (151 aliments de référence) + connecteur en direct **Open Food Facts** (3+ millions d'aliments mondiaux, Nutri-Score et recherche par **Code-Barres EAN-13**).
+   - **Classifieur nutritionnel automatique** : tout produit trouvé en ligne est classé automatiquement par famille de macros et mis en cache dans `IndexedDB` pour fonctionner hors-ligne et dans le **Moteur Mathématique d'Équivalences**.
+
+3. **Compte, Mot de Passe & Sauvegarde Cloud Anti-Piratage (100 % GitHub) :**
+   - **Cryptographie Zero-Knowledge (`Web Crypto API`)** : dérivation de clé **`PBKDF2-HMAC-SHA256` à `600 000` itérations** (norme OWASP anti-brute-force) + chiffrement authentifié **`AES-256-GCM`**.
+   - **Synchronisation Multi-Appareils via GitHub Secret Gist** : vos données sont chiffrées sur votre appareil *avant* d'être envoyées sur votre coffre privé GitHub (même GitHub ne peut pas lire vos données).
+   - **Export/Import `.pulsevault` chiffré** également disponible sans compte GitHub.
+
+4. **Multilingue (`FR` / `EN` / `ES`) & 3 Styles d'Interface :**
+   - Bascule instantanée **Français**, **English**, **Español** (interface + Coach IA).
+   - 3 ambiances visuelles : **Studio Sombre**, **Noir OLED** et **Clair Ivoire** (haute lisibilité en plein soleil).
 
 ---
 
-## 1. Lancement Local (PC, Mac, Linux)
+## Lancement Local & Déploiement
 
 ```bash
-git clone https://github.com/axeldelaro/sportpwa.git
-cd sportpwa
-npm install
-npm run dev
-```
-
----
-
-## 2. Lancement Local sur Android via Termux
-
-```bash
-pkg update && pkg upgrade -y
-pkg install nodejs git -y
-git clone https://github.com/axeldelaro/sportpwa.git
-cd sportpwa
 npm install
 npm run dev -- --host
-```
-Ouvrez `http://localhost:5173` dans votre navigateur mobile puis choisissez **« Installer l'application / Ajouter à l'écran d'accueil »**.
-
----
-
-## 3. Build Statique & Déploiement GitHub Pages
-
-Le projet est configuré avec `base: './'` dans `vite.config.js` et un workflow automatique dans `.github/workflows/deploy.yml` :
-
-```bash
 npm run build
 ```
-Chaque `git push` sur la branche `main` compile automatiquement le dossier `dist/` et met à jour **GitHub Pages**.
+Chaque `git push` sur `main` déploie automatiquement la version de production sur **GitHub Pages**.

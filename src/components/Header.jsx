@@ -4,18 +4,24 @@ import {
   Upload,
   MoreHorizontal,
   Check,
-  Moon,
-  SunMedium,
   Smartphone,
+  Cloud,
+  Globe,
+  Palette,
 } from 'lucide-react';
+import { SUPPORTED_LANGUAGES, tr } from '../i18n/translations';
+import { loadVaultMetadata } from '../utils/cryptoVaultService';
 
 export default function Header({
   profile,
+  lang = 'fr',
+  onChangeLang,
   onOpenProfile,
+  onOpenCloudVault,
   onExportJson,
   onImportJson,
   theme,
-  onToggleTheme,
+  onSetTheme,
   installPromptEvent,
   onTriggerInstall,
 }) {
@@ -23,15 +29,17 @@ export default function Header({
   const [statusToast, setStatusToast] = useState(null);
   const fileInputRef = useRef(null);
 
+  const vaultLinked = Boolean(loadVaultMetadata()?.accountId);
+
   const showToast = (msg) => {
     setStatusToast(msg);
-    setTimeout(() => setStatusToast(null), 2800);
+    setTimeout(() => setStatusToast(null), 2600);
   };
 
   const handleExportClick = async () => {
     setMenuOpen(false);
     await onExportJson();
-    showToast('Sauvegarde exportée');
+    showToast('JSON OK');
   };
 
   const handleFileChange = async (e) => {
@@ -41,9 +49,9 @@ export default function Header({
       const text = await file.text();
       const parsed = JSON.parse(text);
       await onImportJson(parsed);
-      showToast('Sauvegarde restaurée');
+      showToast('Restauré');
     } catch (err) {
-      alert('Fichier JSON invalide : ' + (err.message || 'Erreur'));
+      alert('JSON invalide : ' + (err.message || 'Erreur'));
     } finally {
       e.target.value = '';
       setMenuOpen(false);
@@ -51,27 +59,41 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-zinc-950/80 backdrop-blur-2xl border-b border-white/[0.04] pt-safe">
+    <header className="sticky top-0 z-30 bg-[var(--bg-app)]/80 backdrop-blur-2xl border-b border-[var(--border-subtle)] pt-safe">
       <div className="max-w-xl mx-auto px-5 h-14 flex items-center justify-between">
-        {/* Marque minimaliste */}
+        {/* Identité épurée */}
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="font-semibold tracking-tight text-zinc-100 text-[15px]">
+          <span className="font-semibold tracking-tight text-[var(--text-primary)] text-[15px]">
             PulseFit
           </span>
         </div>
 
-        {/* Actions épurées : Pilule Profil + Menu ••• */}
+        {/* Actions rapides : Cloud Sécurisé + Profil + Menu ••• */}
         <div className="flex items-center gap-2 relative">
           <button
             type="button"
-            onClick={onOpenProfile}
-            className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-white/[0.07] transition-colors"
+            onClick={onOpenCloudVault}
+            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${
+              vaultLinked
+                ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400'
+                : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+            title={tr(lang, 'vault_title')}
+            aria-label={tr(lang, 'vault_title')}
           >
-            <span className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-200 flex items-center justify-center text-[11px] font-semibold">
+            <Cloud className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] transition-colors"
+          >
+            <span className="w-6 h-6 rounded-full bg-emerald-400/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold">
               {(profile?.name || 'A').charAt(0).toUpperCase()}
             </span>
-            <span className="text-xs font-medium text-zinc-300 tabular-nums">
+            <span className="text-xs font-medium text-[var(--text-primary)] tabular-nums">
               {profile?.targets?.kcal || 2200} kcal
             </span>
           </button>
@@ -79,8 +101,8 @@ export default function Header({
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="w-8 h-8 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-white/[0.07] flex items-center justify-center text-zinc-400 hover:text-zinc-200 transition-colors"
-            aria-label="Options et sauvegarde"
+            className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            aria-label="Menu"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
@@ -91,61 +113,104 @@ export default function Header({
                 className="fixed inset-0 z-40"
                 onClick={() => setMenuOpen(false)}
               />
-              <div className="absolute right-0 top-11 z-50 w-56 card-elevated p-1.5 animate-fade-in">
-                {installPromptEvent && (
+              <div className="absolute right-0 top-11 z-50 w-64 card-elevated p-3 space-y-3 animate-fade-in">
+                {/* Sélecteur de Langue FR / EN / ES */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] px-1">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Langue / Language</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 p-1 rounded-full bg-[var(--bg-subtle)]">
+                    {SUPPORTED_LANGUAGES.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => onChangeLang(l.id)}
+                        className={`py-1 rounded-full text-xs font-semibold transition-all ${
+                          lang === l.id
+                            ? 'bg-emerald-400 text-zinc-950'
+                            : 'text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {l.flag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sélecteur des 3 Styles d'Application */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] px-1">
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>Style d’interface</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 p-1 rounded-full bg-[var(--bg-subtle)]">
+                    {[
+                      { id: 'dark', label: 'Studio' },
+                      { id: 'amoled', label: 'OLED' },
+                      { id: 'light', label: 'Ivoire' },
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => onSetTheme(st.id)}
+                        className={`py-1 rounded-full text-[11px] font-semibold transition-all ${
+                          theme === st.id
+                            ? 'bg-emerald-400 text-zinc-950'
+                            : 'text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-[var(--border-subtle)] pt-1.5 space-y-0.5">
                   <button
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
-                      onTriggerInstall();
+                      onOpenCloudVault();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-xs font-medium text-emerald-300 hover:bg-white/[0.05] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-2xl text-xs font-medium text-emerald-400 hover:bg-[var(--bg-subtle)] transition-colors"
                   >
-                    <Smartphone className="w-4 h-4" />
-                    Installer sur l’écran
+                    <Cloud className="w-4 h-4" />
+                    {tr(lang, 'vault_title')}
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={handleExportClick}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-xs font-medium text-zinc-200 hover:bg-white/[0.05] transition-colors"
-                >
-                  <Download className="w-4 h-4 text-zinc-400" />
-                  Exporter sauvegarde (.json)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-xs font-medium text-zinc-200 hover:bg-white/[0.05] transition-colors"
-                >
-                  <Upload className="w-4 h-4 text-zinc-400" />
-                  Importer sauvegarde (.json)
-                </button>
-
-                <div className="my-1 border-t border-white/[0.05]" />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onToggleTheme();
-                    setMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-xs font-medium text-zinc-300 hover:bg-white/[0.05] transition-colors"
-                >
-                  {theme === 'amoled' ? (
-                    <>
-                      <SunMedium className="w-4 h-4 text-zinc-400" />
-                      Nuance : Zinc doux
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-4 h-4 text-zinc-400" />
-                      Nuance : Noir OLED
-                    </>
+                  {installPromptEvent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onTriggerInstall();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-2xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                    >
+                      <Smartphone className="w-4 h-4" />
+                      {tr(lang, 'install_app')}
+                    </button>
                   )}
-                </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportClick}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-2xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                  >
+                    <Download className="w-4 h-4 text-[var(--text-muted)]" />
+                    {tr(lang, 'export_json')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-2xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                  >
+                    <Upload className="w-4 h-4 text-[var(--text-muted)]" />
+                    {tr(lang, 'import_json')}
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -161,7 +226,7 @@ export default function Header({
       </div>
 
       {statusToast && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-zinc-100 text-zinc-950 text-xs font-semibold shadow-xl flex items-center gap-1.5 animate-slide-up">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-emerald-400 text-zinc-950 text-xs font-semibold shadow-xl flex items-center gap-1.5 animate-slide-up">
           <Check className="w-3.5 h-3.5" />
           {statusToast}
         </div>

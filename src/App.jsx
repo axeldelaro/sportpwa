@@ -3,6 +3,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import ProfileModal from './components/ProfileModal';
 import SubstitutionModal from './components/SubstitutionModal';
+import CloudVaultModal from './components/CloudVaultModal';
 import DashboardTab from './components/DashboardTab';
 import WorkoutsTab from './components/WorkoutsTab';
 import ActiveWorkoutPlayer from './components/ActiveWorkoutPlayer';
@@ -18,6 +19,8 @@ import {
   saveHydrationForDate,
   loadTheme,
   saveTheme,
+  loadLanguage,
+  saveLanguage,
   loadActiveWorkoutSession,
   saveActiveWorkoutSession,
   getAllWorkoutHistory,
@@ -42,28 +45,32 @@ import {
   clearCoachMessages,
   getBodyMetricsHistory,
   saveBodyMetricEntry,
+  getAllCachedFoods,
+  saveCachedFood,
   exportFullBackupData,
   importFullBackupData,
 } from './db/database';
 
-import { getFoodById } from './data/foodDatabase';
+import { getFoodById, registerExternalFoods } from './data/foodDatabase';
 import { buildActiveWorkoutExercises } from './data/workoutsData';
 
 export default function App() {
   const todayStr = getTodayDateString(0);
 
-  // Navigation & Thème
+  // Navigation, Thème (Studio / OLED / Ivoire) & Langue (FR / EN / ES)
   const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState(() => loadTheme());
+  const [lang, setLang] = useState(() => loadLanguage());
 
-  // Profil & Hydratation (localStorage immédiat)
+  // Profil, Cloud Chiffré & Hydratation
   const [profile, setProfile] = useState(() => loadProfile());
   const [profileModalOpen, setProfileModalOpen] = useState(
     () => !loadProfile().onboardingCompleted
   );
+  const [cloudVaultOpen, setCloudVaultOpen] = useState(false);
   const [waterMl, setWaterMl] = useState(() => loadHydrationForDate(todayStr));
 
-  // Session d'entraînement active (anti-perte localStorage)
+  // Session d'entraînement active
   const [activeWorkoutSession, setActiveWorkoutSession] = useState(() =>
     loadActiveWorkoutSession()
   );
@@ -96,18 +103,26 @@ export default function App() {
   // PWA Install Prompt
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
 
-  // Application du thème sur <html>
+  // Application du style visuel sur <html>
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.remove('theme-amoled', 'theme-light', 'dark');
     if (theme === 'amoled') {
-      root.classList.add('theme-amoled');
+      root.classList.add('dark', 'theme-amoled');
+    } else if (theme === 'light') {
+      root.classList.add('theme-light');
     } else {
-      root.classList.remove('theme-amoled');
+      root.classList.add('dark');
     }
     saveTheme(theme);
   }, [theme]);
 
-  // Capture de l'événement PWA beforeinstallprompt
+  // Sauvegarde de la langue
+  const handleChangeLang = (nextLang) => {
+    setLang(nextLang);
+    saveLanguage(nextLang);
+  };
+
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault();
@@ -117,10 +132,11 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // Chargement initial complet depuis IndexedDB
+  // Chargement complet depuis IndexedDB (y compris aliments Open Food Facts mis en cache)
   const reloadAllFromIndexedDB = useCallback(async () => {
     try {
       const [
+        cachedExtFoods,
         wkHist,
         tLog,
         selLog,
@@ -130,6 +146,7 @@ export default function App() {
         cMsgs,
         metrics,
       ] = await Promise.all([
+        getAllCachedFoods(),
         getAllWorkoutHistory(),
         getNutritionLogByDate(todayStr),
         getNutritionLogByDate(selectedDate),
@@ -140,6 +157,7 @@ export default function App() {
         getBodyMetricsHistory(),
       ]);
 
+      registerExternalFoods(cachedExtFoods);
       setWorkoutHistory(wkHist);
       setTodayDayLog(tLog);
       setSelectedDayLog(selLog);
@@ -157,14 +175,18 @@ export default function App() {
     reloadAllFromIndexedDB();
   }, [reloadAllFromIndexedDB]);
 
-  // Changement de date dans l'onglet Nutrition
+  const handleCacheExternalFood = async (foodObj) => {
+    if (!foodObj?.id) return;
+    registerExternalFoods([foodObj]);
+    await saveCachedFood(foodObj);
+  };
+
   const handleChangeSelectedDate = async (nextDate) => {
     setSelectedDate(nextDate);
     const log = await getNutritionLogByDate(nextDate);
     setSelectedDayLog(log);
   };
 
-  // Sauvegarde d'un journal nutritionnel quotidien
   const handleSaveDayLog = async (updatedLog) => {
     const saved = await saveNutritionLog(updatedLog);
     setSelectedDayLog(saved);
@@ -175,14 +197,12 @@ export default function App() {
 
   const todayMacros = useMemo(() => computeDayTotals(todayDayLog), [todayDayLog]);
 
-  // Sauvegarde du profil + suivi du poids
   const handleSaveProfile = async (nextProfile) => {
     const saved = saveProfile(nextProfile);
     setProfile(saved);
     if (saved.weight) {
       await saveBodyMetricEntry({ date: todayStr, weightKg: saved.weight });
-      const metrics = await getBodyMetricsHistory();
-      setBodyMetrics(metrics);
+      setBodyMetrics(await getBodyMetricsHistory());
     }
   };
 
@@ -190,19 +210,15 @@ export default function App() {
     const updatedProf = saveProfile({ ...profile, weight: weightVal });
     setProfile(updatedProf);
     await saveBodyMetricEntry({ date: todayStr, weightKg: weightVal });
-    const metrics = await getBodyMetricsHistory();
-    setBodyMetrics(metrics);
+    setBodyMetrics(await getBodyMetricsHistory());
   };
 
-  // Hydratation
   const handleUpdateWater = (nextMl) => {
     const clean = saveHydrationForDate(todayStr, nextMl);
     setWaterMl(clean);
   };
 
-  // =========================================================================
-  // GESTION DES SÉANCES D'ENTRAÎNEMENT ACTIVES & HISTORIQUE
-  // =========================================================================
+  // Séances d'entraînement
   const handleStartWorkout = (workout, intensityMode = 'normal') => {
     const preparedExercises = buildActiveWorkoutExercises(workout, intensityMode);
     const session = {
@@ -237,8 +253,7 @@ export default function App() {
     setActiveWorkoutSession(null);
     saveActiveWorkoutSession(null);
     setWorkoutPlayerOpen(false);
-    const refreshed = await getAllWorkoutHistory();
-    setWorkoutHistory(refreshed);
+    setWorkoutHistory(await getAllWorkoutHistory());
   };
 
   const handleCreateCustomWorkout = async (wkPayload) => {
@@ -256,9 +271,7 @@ export default function App() {
     setWorkoutHistory(await getAllWorkoutHistory());
   };
 
-  // =========================================================================
-  // GESTION DE LA LISTE DE COURSES INTELLIGENTE & AGRÉGATION
-  // =========================================================================
+  // Liste de courses
   const mergeItemsIntoShoppingList = async (rawItems = []) => {
     if (!rawItems.length) return 0;
     const currentList = await getShoppingList();
@@ -362,7 +375,6 @@ export default function App() {
 
     let nextList;
     if (otherSameFoodIdx >= 0) {
-      // Fusionne intelligemment si le nouvel aliment est déjà dans la liste !
       nextList = currentList
         .filter((i) => i.id !== itemId)
         .map((i, idx) =>
@@ -403,9 +415,6 @@ export default function App() {
     setShoppingItems([]);
   };
 
-  // =========================================================================
-  // RECETTES PERSONNALISÉES & CHAT COACH
-  // =========================================================================
   const handleSaveCustomRecipe = async (rec) => {
     const saved = await saveCustomRecipe(rec);
     setCustomRecipes(await getCustomRecipes());
@@ -427,9 +436,7 @@ export default function App() {
     setCoachMessages([]);
   };
 
-  // =========================================================================
-  // EXPORT / IMPORT SAUVEGARDE JSON PORTABLE
-  // =========================================================================
+  // Export / Import JSON & Cloud Vault Restore
   const handleExportJson = async () => {
     const backup = await exportFullBackupData();
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -449,6 +456,7 @@ export default function App() {
     await importFullBackupData(parsedData);
     setProfile(loadProfile());
     setTheme(loadTheme());
+    setLang(loadLanguage());
     setWaterMl(loadHydrationForDate(todayStr));
     await reloadAllFromIndexedDB();
   };
@@ -463,26 +471,26 @@ export default function App() {
   const uncheckedShoppingCount = shoppingItems.filter((i) => !i.checked).length;
 
   return (
-    <div className="min-h-screen app-surface bg-zinc-950 text-zinc-100 flex flex-col">
-      {/* Header Contextuel Fixe */}
+    <div className="min-h-screen app-surface flex flex-col">
       <Header
         profile={profile}
+        lang={lang}
+        onChangeLang={handleChangeLang}
         onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenCloudVault={() => setCloudVaultOpen(true)}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}
         theme={theme}
-        onToggleTheme={() =>
-          setTheme((prev) => (prev === 'amoled' ? 'dark' : 'amoled'))
-        }
+        onSetTheme={setTheme}
         installPromptEvent={installPromptEvent}
         onTriggerInstall={handleTriggerPwaInstall}
       />
 
-      {/* Contenu Principal de l'Onglet Actif */}
       <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-4 pb-24">
         {activeTab === 'dashboard' && (
           <DashboardTab
             profile={profile}
+            lang={lang}
             todayMacros={todayMacros}
             waterMl={waterMl}
             onUpdateWater={handleUpdateWater}
@@ -512,6 +520,7 @@ export default function App() {
         {activeTab === 'nutrition' && (
           <NutritionTab
             selectedDate={selectedDate}
+            lang={lang}
             onChangeDate={handleChangeSelectedDate}
             dayLog={selectedDayLog}
             onSaveDayLog={handleSaveDayLog}
@@ -523,12 +532,14 @@ export default function App() {
             onOpenSubstitutionModal={(cfg) =>
               setSubModalState({ ...cfg, isOpen: true })
             }
+            onCacheExternalFood={handleCacheExternalFood}
           />
         )}
 
         {activeTab === 'shopping' && (
           <ShoppingListTab
             shoppingItems={shoppingItems}
+            lang={lang}
             profile={profile}
             onToggleItemChecked={handleToggleShoppingChecked}
             onUpdateItemGrams={handleUpdateShoppingGrams}
@@ -543,12 +554,14 @@ export default function App() {
             onOpenSubstitutionModal={(cfg) =>
               setSubModalState({ ...cfg, isOpen: true })
             }
+            onCacheExternalFood={handleCacheExternalFood}
           />
         )}
 
         {activeTab === 'coach' && (
           <CoachChatTab
             profile={profile}
+            lang={lang}
             todayMacros={todayMacros}
             waterMl={waterMl}
             workoutHistory={workoutHistory}
@@ -559,15 +572,14 @@ export default function App() {
         )}
       </main>
 
-      {/* Barre de Navigation Inférieure Fixe à 5 Onglets */}
       <BottomNav
         activeTab={activeTab}
+        lang={lang}
         onChangeTab={setActiveTab}
         uncheckedShoppingCount={uncheckedShoppingCount}
         hasActiveWorkout={Boolean(activeWorkoutSession)}
       />
 
-      {/* Modale Profil Universel & Onboarding */}
       <ProfileModal
         isOpen={profileModalOpen}
         profile={profile}
@@ -575,7 +587,13 @@ export default function App() {
         onSaveProfile={handleSaveProfile}
       />
 
-      {/* Modale Interactive d'Équivalence Nutritionnelle */}
+      <CloudVaultModal
+        isOpen={cloudVaultOpen}
+        onClose={() => setCloudVaultOpen(false)}
+        onGetFullBackup={exportFullBackupData}
+        onRestoreFullBackup={handleImportJson}
+      />
+
       <SubstitutionModal
         isOpen={subModalState.isOpen}
         sourceFoodId={subModalState.sourceFoodId}
@@ -590,7 +608,6 @@ export default function App() {
         }}
       />
 
-      {/* Lecteur Plein Écran de Séance Active */}
       {workoutPlayerOpen && activeWorkoutSession && (
         <ActiveWorkoutPlayer
           session={activeWorkoutSession}
