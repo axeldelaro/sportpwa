@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pulsefit-pwa-v3.0';
+const CACHE_NAME = 'pulsefit-pwa-v4.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,19 +6,53 @@ const APP_SHELL = [
   './icon.svg',
 ];
 
+/**
+ * Extrait automatiquement tous les bundles JS/CSS générés par Vite dans index.html
+ * afin que l'application entière + le moteur Coach IA soient mis en cache dès le 1er lancement !
+ */
+function extractAssetsFromHtml(htmlText) {
+  const found = new Set();
+  const regex = /(?:src|href)=["'](\.?\/assets\/[^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(htmlText)) !== null) {
+    const raw = match[1];
+    found.add(raw.startsWith('./') ? raw : `.${raw}`);
+  }
+  return Array.from(found);
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) =>
-        Promise.all(
+      .then(async (cache) => {
+        // 1. Pré-cache l'App Shell de base
+        await Promise.all(
           APP_SHELL.map((url) =>
             fetch(url, { cache: 'reload' })
               .then((res) => (res.ok ? cache.put(url, res) : null))
-              .catch(() => cache.add(url))
+              .catch(() => cache.add(url).catch(() => null))
           )
-        )
-      )
+        );
+
+        // 2. Découvre et met en cache immédiatement tous les chunks JS/CSS (IA, aliments, exercices) dès l'ouverture du site
+        try {
+          const indexRes = await cache.match('./index.html');
+          if (indexRes) {
+            const html = await indexRes.clone().text();
+            const bundleUrls = extractAssetsFromHtml(html);
+            await Promise.all(
+              bundleUrls.map((assetUrl) =>
+                fetch(assetUrl, { cache: 'reload' })
+                  .then((res) => (res.ok ? cache.put(assetUrl, res) : null))
+                  .catch(() => null)
+              )
+            );
+          }
+        } catch {
+          // Ignore
+        }
+      })
       .then(() => self.skipWaiting())
   );
 });
@@ -45,7 +79,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navigation HTML : Network-First frais avec repli hors-ligne
+  // Navigation HTML : Network-First rapide avec repli hors-ligne instantané
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request, { cache: 'no-store' })
@@ -61,10 +95,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Évite de saturer le cache App Shell avec les très gros binaires WASM (gérés à la demande)
-  if (url.pathname.endsWith('.wasm')) return;
-
-  // Assets statiques JS/CSS/SVG : Cache-First + mise à jour propre
+  // Assets statiques JS/CSS/SVG : Cache-First ultra-rapide + rafraîchissement silencieux
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)

@@ -2,25 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowUp,
   RotateCcw,
-  Cpu,
   BookOpen,
   ExternalLink,
-  Sparkles,
+  Zap,
 } from 'lucide-react';
 import {
   generateCoachResponse,
-  buildGroundedLLMMessages,
+  warmUpCoachEngine,
   QUICK_COACH_SUGGESTIONS_BY_LANG,
 } from '../utils/localCoachEngine';
-import {
-  subscribeNeuralState,
-  preloadNeuralLLM,
-  generateWithNeuralLLM,
-} from '../utils/neuralCoachClient';
 import { tr } from '../i18n/translations';
 
 function renderFormattedLine(line, lineIdx) {
-  const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  const parts = String(line).split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return (
     <p key={lineIdx} className={line.trim() === '' ? 'h-2' : 'leading-relaxed'}>
       {parts.map((part, idx) => {
@@ -56,20 +50,20 @@ export default function CoachChatTab({
 }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
-  const [neuralEnabled, setNeuralEnabled] = useState(false);
-  const [neuralStatus, setNeuralStatus] = useState({
-    ready: false,
-    loading: false,
-    progress: 0,
-    device: null,
-    error: null,
-  });
   const [memory, setMemory] = useState(null);
   const [dynamicSuggestions, setDynamicSuggestions] = useState(
     QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr
   );
   const chatScrollRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    warmUpCoachEngine();
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setDynamicSuggestions(
@@ -78,38 +72,28 @@ export default function CoachChatTab({
   }, [lang]);
 
   useEffect(() => {
-    const unsub = subscribeNeuralState((st) => setNeuralStatus(st));
-    return unsub;
-  }, []);
-
-  useEffect(() => {
     const el = chatScrollRef.current;
     if (el) {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, isTyping, streamingText]);
+  }, [messages.length, isTyping]);
 
-  const handleToggleNeural = () => {
-    const next = !neuralEnabled;
-    setNeuralEnabled(next);
-    if (next && !neuralStatus.ready && !neuralStatus.loading) {
-      preloadNeuralLLM();
-    }
-  };
-
-  const sendQuestion = async (rawQuestion) => {
+  const sendQuestion = (rawQuestion) => {
     const trimmed = String(rawQuestion || '').trim();
     if (!trimmed || isTyping) return;
 
-    setInput('');
-    await onAppendMessage({
+    const nowTs = Date.now();
+    const userMsg = {
+      id: `msg_u_${nowTs}_${Math.random().toString(36).slice(2, 6)}`,
       role: 'user',
       content: trimmed,
-      timestamp: Date.now(),
-    });
+      timestamp: nowTs,
+    };
 
+    // 1. Affichage et persistance synchrones immédiats (0 ms, zéro perte possible)
+    setInput('');
+    onAppendMessage(userMsg);
     setIsTyping(true);
-    setStreamingText('');
 
     const contextPayload = {
       profile,
@@ -120,57 +104,39 @@ export default function CoachChatTab({
       lang,
     };
 
-    // MODE A : VRAI LLM NEURAL EMBARQUÉ (Qwen2.5-0.5B-Instruct WebGPU/WASM) + RAG SCIENTIFIQUE
-    if (neuralEnabled) {
+    // 2. Génération instantanée hors-ligne protégée par try/catch
+    setTimeout(() => {
+      let response;
       try {
-        const { messages: llmPromptMessages, sources } = buildGroundedLLMMessages(
-          trimmed,
-          contextPayload,
-          messages
-        );
-
-        const finalGenerated = await generateWithNeuralLLM(
-          llmPromptMessages,
-          (partialText) => {
-            setStreamingText(partialText);
-          }
-        );
-
-        setStreamingText('');
-        await onAppendMessage({
-          role: 'assistant',
-          content: finalGenerated || '...',
-          sources,
-          engine: 'Qwen2.5-0.5B Neural',
-          timestamp: Date.now(),
-        });
-        setIsTyping(false);
-        return;
+        response = generateCoachResponse(trimmed, contextPayload);
       } catch {
-        // Repli automatique sans coupure sur le moteur RAG scientifique si erreur mémoire GPU
-        setStreamingText('');
-      }
-    }
-
-    // MODE B : MOTEUR SCIENTIFIQUE RAG INSTANTANÉ (<5ms, 0 Mo)
-    setTimeout(async () => {
-      const response = generateCoachResponse(trimmed, contextPayload);
-
-      if (response.memory) setMemory(response.memory);
-      if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {
-        setDynamicSuggestions(response.suggestions);
+        response = {
+          text: `Voici ton point rapide : il te reste **${Math.max(0, Math.round((profile?.targets?.kcal || 2200) - (todayMacros?.kcal || 0)))} kcal** et **${Math.max(0, Math.round((profile?.targets?.protein || 140) - (todayMacros?.protein || 0)))}g de protéines** aujourd'hui.`,
+          sources: [],
+          suggestions:
+            QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr,
+        };
       }
 
-      await onAppendMessage({
+      const replyTs = Date.now();
+      const assistantMsg = {
+        id: `msg_a_${replyTs}_${Math.random().toString(36).slice(2, 6)}`,
         role: 'assistant',
-        content: response.text,
-        sources: response.sources || [],
-        engine: 'RAG Science',
-        timestamp: Date.now(),
-      });
+        content: response?.text || 'Réponse générée.',
+        sources: Array.isArray(response?.sources) ? response.sources : [],
+        timestamp: replyTs,
+      };
 
-      setIsTyping(false);
-    }, 240);
+      onAppendMessage(assistantMsg);
+
+      if (isMountedRef.current) {
+        if (response?.memory) setMemory(response.memory);
+        if (Array.isArray(response?.suggestions) && response.suggestions.length > 0) {
+          setDynamicSuggestions(response.suggestions);
+        }
+        setIsTyping(false);
+      }
+    }, 110);
   };
 
   const handleSubmit = (e) => {
@@ -180,83 +146,51 @@ export default function CoachChatTab({
 
   return (
     <div className="flex flex-col h-[calc(100dvh-9.8rem)] max-h-[760px] animate-fade-in">
-      {/* Barre supérieure : Sélecteur RAG Instantané vs LLM Neural Embarqué */}
+      {/* Barre supérieure : Statut IA Pré-chargée Hors-Ligne Instantanée */}
       <div className="flex items-center justify-between gap-2 px-1 pb-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleToggleNeural}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-              neuralEnabled
-                ? 'bg-emerald-400 text-zinc-950 border-emerald-400 font-semibold'
-                : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-            }`}
-            title="Activer le vrai modèle LLM Qwen2.5-0.5B dans le navigateur (100% gratuit et illimité)"
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            <span>
-              {neuralEnabled ? `${tr(lang, 'neural_llm')} (Qwen 0.5B)` : tr(lang, 'instant_rag')}
-            </span>
-          </button>
-
-          {neuralEnabled && neuralStatus.ready && (
-            <span className="text-[10.5px] text-emerald-400 font-medium">
-              {neuralStatus.device === 'webgpu' ? 'WebGPU' : 'WASM'} · Illimité
-            </span>
-          )}
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/25 text-[11px] sm:text-xs font-medium text-emerald-400 whitespace-nowrap">
+          <Zap className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            {lang === 'en'
+              ? 'Offline Science AI · Ready'
+              : lang === 'es'
+                ? 'IA Científica Offline · Lista'
+                : 'IA Hors-Ligne · Pré-chargée'}
+          </span>
         </div>
 
         {messages.length > 0 && (
           <button
             type="button"
             onClick={() => {
-              if (window.confirm('Réinitialiser la conversation ?')) {
+              if (window.confirm('Effacer l’historique de conversation ?')) {
                 onClearHistory();
                 setMemory(null);
               }
             }}
-            className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-subtle)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            title="Effacer l'historique"
           >
             <RotateCcw className="w-3 h-3" />
+            <span className="hidden xs:inline">Effacer</span>
           </button>
         )}
       </div>
-
-      {/* Barre de progression téléchargement initial du modèle LLM Neural */}
-      {neuralEnabled && neuralStatus.loading && (
-        <div className="mb-3 px-4 py-2.5 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] space-y-1.5 shrink-0">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-[var(--text-secondary)] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              Chargement initial Qwen2.5-0.5B (mis en cache hors-ligne ensuite)
-            </span>
-            <span className="font-semibold text-emerald-400 tabular-nums">
-              {neuralStatus.progress}%
-            </span>
-          </div>
-          <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-400 transition-all duration-300"
-              style={{ width: `${neuralStatus.progress}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Fil de discussion */}
       <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-3.5 pr-1 pb-2">
         <div className="max-w-[90%] rounded-3xl rounded-tl-md card-surface px-4 py-3.5 text-xs text-[var(--text-secondary)] leading-relaxed">
           {lang === 'en' ? (
             <>
-              Hi <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlete'}</strong>. Ask unlimited questions backed by <strong>ISSN, ACSM & PubMed</strong> studies — or toggle <strong>Neural LLM</strong> above to run our local generative model directly in your browser.
+              Hi <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlete'}</strong>. My sport & nutrition knowledge base (<strong>25 ISSN, ACSM & PubMed studies</strong>, meal plans, food swaps, 1RM & HR zones) is already cached on your device for instant offline answers.
             </>
           ) : lang === 'es' ? (
             <>
-              Hola <strong className="text-[var(--text-primary)]">{profile?.name || 'Atleta'}</strong>. Haz preguntas ilimitadas respaldadas por estudios <strong>ISSN, ACSM y PubMed</strong> — o activa <strong>LLM Neural</strong> arriba para usar el modelo generativo local en tu navegador.
+              Hola <strong className="text-[var(--text-primary)]">{profile?.name || 'Atleta'}</strong>. Mi motor científico (<strong>25 estudios ISSN, ACSM y PubMed</strong>, menús, equivalencias, 1RM y zonas cardio) ya está en caché para responder al instante con o sin conexión.
             </>
           ) : (
             <>
-              Salut <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Pose tes questions en illimité avec références scientifiques (<strong>ISSN, ACSM, BJSM, PubMed</strong>) — ou active <strong>LLM Neural</strong> en haut pour exécuter le modèle IA génératif directement dans ton navigateur.
+              Salut <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Mon moteur IA Sport & Nutrition (<strong>25 méta-analyses ISSN, ACSM & PubMed</strong>, menus complets, équivalences d’aliments, anatomie, 1RM et zones cardio) est déjà en cache pour te répondre instantanément, même hors-ligne.
             </>
           )}
         </div>
@@ -277,7 +211,7 @@ export default function CoachChatTab({
               >
                 {isUser
                   ? msg.content
-                  : String(msg.content)
+                  : String(msg.content || '')
                       .split('\n')
                       .map((line, idx) => renderFormattedLine(line, idx))}
               </div>
@@ -305,14 +239,7 @@ export default function CoachChatTab({
           );
         })}
 
-        {/* Rendu temps réel du streaming token par token du LLM Neural */}
-        {isTyping && streamingText && (
-          <div className="max-w-[88%] rounded-3xl rounded-tl-md card-surface px-4 py-3 text-xs text-[var(--text-secondary)] space-y-1">
-            {streamingText.split('\n').map((line, idx) => renderFormattedLine(line, idx))}
-          </div>
-        )}
-
-        {isTyping && !streamingText && (
+        {isTyping && (
           <div className="inline-flex items-center gap-1.5 rounded-3xl card-surface px-4 py-3">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
             <span
@@ -325,10 +252,9 @@ export default function CoachChatTab({
             />
           </div>
         )}
-
       </div>
 
-      {/* Suggestions & Barre d'envoi */}
+      {/* Suggestions rapides & Barre d'envoi */}
       <div className="pt-2 space-y-2.5 shrink-0">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {dynamicSuggestions.map((sug) => (

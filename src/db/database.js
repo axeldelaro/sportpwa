@@ -23,6 +23,7 @@ export const LS_KEYS = {
   LANG: 'pulsefit_lang_v1',
   ACTIVE_WORKOUT: 'pulsefit_active_workout_v1',
   ACTIVE_ACCOUNT: 'pulsefit_active_account_v1',
+  COACH_HISTORY: 'pulsefit_coach_history_v1',
 };
 
 export const ACTIVITY_LEVELS = [
@@ -328,11 +329,29 @@ export function openDatabase() {
       }
     };
 
+    const timeoutId = setTimeout(() => {
+      dbInstancePromise = null;
+      reject(new Error('IndexedDB timeout (connexion bloquée par un ancien onglet)'));
+    }, 2500);
+
     request.onsuccess = (event) => {
-      resolve(event.target.result);
+      clearTimeout(timeoutId);
+      const db = event.target.result;
+      db.onversionchange = () => {
+        db.close();
+        dbInstancePromise = null;
+      };
+      resolve(db);
+    };
+
+    request.onblocked = () => {
+      clearTimeout(timeoutId);
+      dbInstancePromise = null;
+      reject(new Error('IndexedDB bloquée par un autre onglet ouvert'));
     };
 
     request.onerror = (event) => {
+      clearTimeout(timeoutId);
       dbInstancePromise = null;
       reject(event.target.error);
     };
@@ -499,10 +518,47 @@ export async function deleteCustomWorkout(id) {
   return withStore('customWorkouts', 'readwrite', (store) => store.delete(id));
 }
 
-// --- Historique Chat Coach IA Local ---
+// --- Historique Chat Coach IA Local (Miroir synchrone localStorage + IndexedDB anti-perte) ---
+export function loadCoachMessagesSync() {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.COACH_HISTORY);
+    const parsed = raw ? safeJsonParse(raw, []) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCoachMessagesSync(list) {
+  try {
+    const trimmed = (Array.isArray(list) ? list : []).slice(-80);
+    localStorage.setItem(LS_KEYS.COACH_HISTORY, JSON.stringify(trimmed));
+  } catch {
+    // Ignore quota
+  }
+}
+
 export async function getCoachMessages() {
-  const list = await withStore('coachMessages', 'readonly', (store) => store.getAll());
-  return (list || []).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  const syncList = loadCoachMessagesSync();
+  try {
+    const list = await withStore('coachMessages', 'readonly', (store) => store.getAll());
+    const map = new Map();
+    (list || []).forEach((m) => {
+      if (m?.id) map.set(m.id, m);
+    });
+    syncList.forEach((m) => {
+      if (m?.id) map.set(m.id, m);
+    });
+    const merged = Array.from(map.values()).sort(
+      (a, b) => (a.timestamp || 0) - (b.timestamp || 0)
+    );
+    if (merged.length > 0) {
+      saveCoachMessagesSync(merged);
+    }
+    return merged;
+  } catch {
+    return syncList;
+  }
 }
 
 export async function addCoachMessage(message) {
@@ -511,12 +567,26 @@ export async function addCoachMessage(message) {
     id: message.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     timestamp: message.timestamp || Date.now(),
   };
-  await withStore('coachMessages', 'readwrite', (store) => store.put(record));
+
+  // 1. Sauvegarde synchrone instantanée garantie (zéro disparition possible)
+  const currentSync = loadCoachMessagesSync();
+  const nextSync = [...currentSync.filter((m) => m.id !== record.id), record].sort(
+    (a, b) => (a.timestamp || 0) - (b.timestamp || 0)
+  );
+  saveCoachMessagesSync(nextSync);
+
+  // 2. Persistance IndexedDB non-bloquante en tâche de fond
+  withStore('coachMessages', 'readwrite', (store) => store.put(record)).catch(() => {});
   return record;
 }
 
 export async function clearCoachMessages() {
-  return withStore('coachMessages', 'readwrite', (store) => store.clear());
+  try {
+    localStorage.removeItem(LS_KEYS.COACH_HISTORY);
+  } catch {
+    // Ignore
+  }
+  return withStore('coachMessages', 'readwrite', (store) => store.clear()).catch(() => {});
 }
 
 // --- Suivi Biométrique & Poids ---
@@ -584,6 +654,7 @@ export async function exportFullBackupData() {
     app: 'PulseFit PWA',
     schemaVersion: 2,
     exportedAt: new Date().toISOString(),
+    updatedAtMs: Date.now(),
     localStorage: {
       profile: loadProfile(),
       hydration: hydrationMap,
@@ -609,7 +680,10 @@ export async function importFullBackupData(payload) {
   }
 
   if (payload.localStorage?.profile) {
-    saveProfile(payload.localStorage.profile);
+    saveProfile({
+      ...payload.localStorage.profile,
+      onboardingCompleted: true,
+    });
   }
   if (payload.localStorage?.hydration) {
     localStorage.setItem(LS_KEYS.HYDRATION, JSON.stringify(payload.localStorage.hydration));
@@ -619,6 +693,11 @@ export async function importFullBackupData(payload) {
   }
   if (payload.localStorage?.lang) {
     saveLanguage(payload.localStorage.lang);
+  }
+  if (Array.isArray(payload.indexedDB?.coachMessages)) {
+    saveCoachMessagesSync(payload.indexedDB.coachMessages);
+  } else {
+    saveCoachMessagesSync([]);
   }
 
   const db = await openDatabase();
@@ -679,6 +758,7 @@ export async function clearWorkingStoresOnLock() {
   localStorage.removeItem(LS_KEYS.HYDRATION);
   localStorage.removeItem(LS_KEYS.ACTIVE_WORKOUT);
   localStorage.removeItem(LS_KEYS.ACTIVE_ACCOUNT);
+  localStorage.removeItem(LS_KEYS.COACH_HISTORY);
 
   const db = await openDatabase();
   const workingStores = [

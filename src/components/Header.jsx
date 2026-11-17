@@ -61,15 +61,15 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-30 bg-[var(--bg-app)]/80 backdrop-blur-2xl border-b border-[var(--border-subtle)] pt-safe">
-      <div className="max-w-xl mx-auto px-5 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span className="font-semibold tracking-tight text-[var(--text-primary)] text-[15px]">
             PulseFit
           </span>
         </div>
 
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-1.5 sm:gap-2 relative min-w-0">
           {/* Bouton Compte & Mot de Passe */}
           <button
             type="button"

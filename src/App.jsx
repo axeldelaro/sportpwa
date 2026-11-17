@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import ProfileModal from './components/ProfileModal';
@@ -41,6 +41,8 @@ import {
   getCustomWorkouts,
   saveCustomWorkout,
   deleteCustomWorkout,
+  loadCoachMessagesSync,
+  saveCoachMessagesSync,
   getCoachMessages,
   addCoachMessage,
   clearCoachMessages,
@@ -55,10 +57,16 @@ import {
 
 import { getFoodById, registerExternalFoods } from './data/foodDatabase';
 import { buildActiveWorkoutExercises } from './data/workoutsData';
+import { warmUpCoachEngine } from './utils/localCoachEngine';
 import {
-  inspectPendingSyncHash,
-  saveEncryptedSessionSnapshot,
+  restoreUnlockedSession,
+  clearUnlockedSession,
+  syncPushAccountToCloud,
+  syncPullAccountFromCloud,
 } from './utils/cryptoVaultService';
+
+// Pré-chargement immédiat de l'IA Scientifique dès l'évaluation du bundle au lancement du site (0 ms)
+warmUpCoachEngine();
 
 export default function App() {
   const todayStr = getTodayDateString(0);
@@ -67,21 +75,15 @@ export default function App() {
   const [theme, setTheme] = useState(() => loadTheme());
   const [lang, setLang] = useState(() => loadLanguage());
 
-  // Session compte chiffré en mémoire (CryptoKey non-extractible)
+  // Session compte Cloud chiffré multi-appareils
   const [activeAccount, setActiveAccount] = useState(null);
-  const [pendingSyncInfo, setPendingSyncInfo] = useState(() =>
-    typeof window !== 'undefined' ? inspectPendingSyncHash(window.location.hash) : null
-  );
+  const suppressNextAutoPushRef = useRef(false);
 
   const [profile, setProfile] = useState(() => loadProfile());
-  const [profileModalOpen, setProfileModalOpen] = useState(() => {
-    const hasSync =
-      typeof window !== 'undefined' && Boolean(inspectPendingSyncHash(window.location.hash));
-    return !hasSync && !loadProfile().onboardingCompleted;
-  });
-  const [cloudVaultOpen, setCloudVaultOpen] = useState(() =>
-    typeof window !== 'undefined' && Boolean(inspectPendingSyncHash(window.location.hash))
+  const [profileModalOpen, setProfileModalOpen] = useState(
+    () => !loadProfile().onboardingCompleted
   );
+  const [cloudVaultOpen, setCloudVaultOpen] = useState(false);
   const [waterMl, setWaterMl] = useState(() => loadHydrationForDate(todayStr));
 
   const [activeWorkoutSession, setActiveWorkoutSession] = useState(() =>
@@ -100,7 +102,8 @@ export default function App() {
   const [shoppingItems, setShoppingItems] = useState([]);
   const [customRecipes, setCustomRecipes] = useState([]);
   const [customWorkouts, setCustomWorkouts] = useState([]);
-  const [coachMessages, setCoachMessages] = useState([]);
+  // Initialisation synchrone garantie dès la milliseconde 0 pour le Coach IA
+  const [coachMessages, setCoachMessages] = useState(() => loadCoachMessagesSync());
   const [bodyMetrics, setBodyMetrics] = useState([]);
 
   const [subModalState, setSubModalState] = useState({
@@ -131,24 +134,9 @@ export default function App() {
     saveLanguage(nextLang);
   };
 
-  // Remonte proprement en haut de page à chaque changement d'onglet
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeTab]);
-
-  // Détection automatique si un lien de synchronisation #sync=... est ouvert
-  useEffect(() => {
-    const onHashChange = () => {
-      const info = inspectPendingSyncHash(window.location.hash);
-      if (info) {
-        setPendingSyncInfo(info);
-        setProfileModalOpen(false);
-        setCloudVaultOpen(true);
-      }
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -190,7 +178,20 @@ export default function App() {
       setShoppingItems(shop);
       setCustomRecipes(cRecs);
       setCustomWorkouts(cWks);
-      setCoachMessages(cMsgs);
+      setCoachMessages((prev) => {
+        const map = new Map();
+        (cMsgs || []).forEach((m) => {
+          if (m?.id) map.set(m.id, m);
+        });
+        prev.forEach((m) => {
+          if (m?.id) map.set(m.id, m);
+        });
+        const merged = Array.from(map.values()).sort(
+          (a, b) => (a.timestamp || 0) - (b.timestamp || 0)
+        );
+        saveCoachMessagesSync(merged);
+        return merged;
+      });
       setBodyMetrics(metrics);
     } catch (err) {
       console.error('Erreur chargement IndexedDB :', err);
@@ -201,22 +202,70 @@ export default function App() {
     reloadAllFromIndexedDB();
   }, [reloadAllFromIndexedDB]);
 
-  // Sauvegarde automatique chiffrée en AES-256-GCM dès qu'un compte est connecté
+  const handleImportJson = useCallback(
+    async (parsedData) => {
+      suppressNextAutoPushRef.current = true;
+      await importFullBackupData(parsedData);
+      const loadedProf = loadProfile();
+      setProfile(loadedProf);
+      if (loadedProf.onboardingCompleted) {
+        setProfileModalOpen(false);
+      }
+      setTheme(loadTheme());
+      setLang(loadLanguage());
+      setWaterMl(loadHydrationForDate(todayStr));
+      setCoachMessages(loadCoachMessagesSync());
+      await reloadAllFromIndexedDB();
+      setTimeout(() => {
+        suppressNextAutoPushRef.current = false;
+      }, 2200);
+    },
+    [todayStr, reloadAllFromIndexedDB]
+  );
+
+  // Restauration automatique de la session Cloud au lancement + synchronisation entrante silencieuse
   useEffect(() => {
-    if (!activeAccount?.sessionKey || !activeAccount?.username) return undefined;
+    let cancelled = false;
+    (async () => {
+      const restored = await restoreUnlockedSession();
+      if (!restored || cancelled) return;
+      setActiveAccount(restored);
+      setProfileModalOpen(false);
+
+      try {
+        const cloudPayload = await syncPullAccountFromCloud(restored);
+        if (cloudPayload && !cancelled) {
+          const localUpdatedMs = new Date(loadProfile().updatedAt || 0).getTime() || 0;
+          const cloudUpdatedMs =
+            Number(cloudPayload.updatedAtMs) ||
+            new Date(cloudPayload.exportedAt || 0).getTime() ||
+            0;
+          if (cloudUpdatedMs >= localUpdatedMs) {
+            await handleImportJson(cloudPayload);
+          }
+        }
+      } catch {
+        // Mode hors-ligne transparent
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [handleImportJson]);
+
+  // Synchronisation automatique vers les 5 serveurs Cloud dès qu'une donnée évolue
+  useEffect(() => {
+    if (!activeAccount?.aesKey || !activeAccount?.username) return undefined;
+    if (suppressNextAutoPushRef.current) return undefined;
+
     const timer = setTimeout(async () => {
       try {
         const snapshot = await exportFullBackupData();
-        await saveEncryptedSessionSnapshot(
-          activeAccount.username,
-          activeAccount.sessionKey,
-          activeAccount.saltBase64,
-          snapshot
-        );
+        await syncPushAccountToCloud(activeAccount, snapshot);
       } catch {
-        // Ignore
+        // Ignore hors-ligne : sera synchronisé à la prochaine modification connectée
       }
-    }, 900);
+    }, 1400);
 
     return () => clearTimeout(timer);
   }, [
@@ -229,33 +278,25 @@ export default function App() {
     shoppingItems,
     customRecipes,
     customWorkouts,
+    coachMessages,
+    bodyMetrics,
   ]);
 
-  const handleClearPendingSync = () => {
-    setPendingSyncInfo(null);
-    if (window.location.hash.startsWith('#sync=')) {
-      window.history.replaceState(
-        null,
-        '',
-        window.location.pathname + window.location.search
-      );
-    }
-  };
-
   const handleAccountLockedOut = async () => {
-    if (activeAccount?.sessionKey) {
-      const snapshot = await exportFullBackupData();
-      await saveEncryptedSessionSnapshot(
-        activeAccount.username,
-        activeAccount.sessionKey,
-        activeAccount.saltBase64,
-        snapshot
-      );
+    if (activeAccount?.aesKey) {
+      try {
+        const snapshot = await exportFullBackupData();
+        await syncPushAccountToCloud(activeAccount, snapshot);
+      } catch {
+        // Ignore
+      }
     }
+    clearUnlockedSession();
     setActiveAccount(null);
-    await clearWorkingStoresOnLock();
+    await clearWorkingStoresOnLock().catch(() => {});
     setProfile({ ...DEFAULT_PROFILE });
     setWaterMl(0);
+    setCoachMessages([]);
     setActiveWorkoutSession(null);
     await reloadAllFromIndexedDB();
   };
@@ -509,14 +550,29 @@ export default function App() {
     setCustomRecipes(await getCustomRecipes());
   };
 
-  const handleAppendCoachMessage = async (msg) => {
-    await addCoachMessage(msg);
-    setCoachMessages(await getCoachMessages());
-  };
+  // Ajout synchrone garanti (fonctionnel React + miroir localStorage + IndexedDB asynchrone)
+  const handleAppendCoachMessage = useCallback((msg) => {
+    const record = {
+      ...msg,
+      id: msg.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: msg.timestamp || Date.now(),
+    };
+
+    setCoachMessages((prev) => {
+      const next = [...prev.filter((m) => m.id !== record.id), record].sort(
+        (a, b) => (a.timestamp || 0) - (b.timestamp || 0)
+      );
+      saveCoachMessagesSync(next);
+      return next;
+    });
+
+    addCoachMessage(record).catch(() => {});
+    return record;
+  }, []);
 
   const handleClearCoachHistory = async () => {
-    await clearCoachMessages();
     setCoachMessages([]);
+    await clearCoachMessages();
   };
 
   const handleExportJson = async () => {
@@ -532,15 +588,6 @@ export default function App() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  };
-
-  const handleImportJson = async (parsedData) => {
-    await importFullBackupData(parsedData);
-    setProfile(loadProfile());
-    setTheme(loadTheme());
-    setLang(loadLanguage());
-    setWaterMl(loadHydrationForDate(todayStr));
-    await reloadAllFromIndexedDB();
   };
 
   const handleTriggerPwaInstall = async () => {
@@ -675,10 +722,11 @@ export default function App() {
       <CloudVaultModal
         isOpen={cloudVaultOpen}
         activeAccount={activeAccount}
-        pendingSyncInfo={pendingSyncInfo}
-        onClearPendingSync={handleClearPendingSync}
         onClose={() => setCloudVaultOpen(false)}
-        onAccountAuthenticated={(acc) => setActiveAccount(acc)}
+        onAccountAuthenticated={(acc) => {
+          setActiveAccount(acc);
+          setProfileModalOpen(false);
+        }}
         onAccountLockedOut={handleAccountLockedOut}
         onGetFullBackup={exportFullBackupData}
         onRestoreFullBackup={handleImportJson}
