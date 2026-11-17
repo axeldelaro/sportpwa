@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,15 +9,15 @@ import {
   Search,
   Check,
   X,
-  ScanBarcode,
-  Loader2,
-  Globe,
+  Heart,
+  Ban,
+  RefreshCw,
+  BookmarkPlus,
 } from 'lucide-react';
 import {
   getAllFoods,
   getFoodById,
   calculateFoodMacros,
-  isFoodCompatibleWithProfile,
 } from '../data/foodDatabase';
 import {
   MEAL_SLOTS,
@@ -27,14 +27,26 @@ import {
 } from '../data/recipesData';
 import {
   normalizeText,
-  adaptRecipeIngredientsToProfile,
+  getLiveAdaptedRecipe,
 } from '../utils/substitutionEngine';
-import {
-  searchOpenFoodFacts,
-  fetchProductByBarcode,
-} from '../utils/openFoodFactsService';
 import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
+import SmartFoodPicker from './SmartFoodPicker';
+
+const COMMON_EXCLUSION_SUGGESTIONS = [
+  'coriandre_fraiche',
+  'champignons_paris',
+  'brocoli',
+  'epinards_frais',
+  'avocat',
+  'thon_naturel',
+  'saumon_frais',
+  'banane',
+  'oignon_jaune',
+  'ail_frais',
+  'chevre_frais_buche',
+  'fromage_blanc_0',
+];
 
 function shiftDateString(dateStr, deltaDays) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -94,6 +106,8 @@ export default function NutritionTab({
   dayLog,
   onSaveDayLog,
   profile,
+  onToggleDislikedFood,
+  onToggleFavoriteRecipe,
   customRecipes = [],
   onSaveCustomRecipe,
   onDeleteCustomRecipe,
@@ -105,23 +119,21 @@ export default function NutritionTab({
   const [drawerTab, setDrawerTab] = useState('recipes');
   const [portionMult, setPortionMult] = useState(1);
   const [recipeSearch, setRecipeSearch] = useState('');
-  const [showAdaptableRecipes, setShowAdaptableRecipes] = useState(false);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [exclusionMode, setExclusionMode] = useState('adapt'); // 'adapt' | 'hide'
   const [expandedRecipeId, setExpandedRecipeId] = useState(null);
 
-  const [foodSearch, setFoodSearch] = useState('');
-  const [remoteFoods, setRemoteFoods] = useState([]);
-  const [remoteLoading, setRemoteLoading] = useState(false);
-  const [barcodePromptOpen, setBarcodePromptOpen] = useState(false);
-  const [barcodeValue, setBarcodeValue] = useState('');
+  // Modale légère d'ajout d'ingrédient directement DANS un plat/recette déjà posé
+  const [appendTargetEntry, setAppendTargetEntry] = useState(null); // { slotId, entryId, title }
 
-  const [selectedFoodObj, setSelectedFoodObj] = useState(null);
-  const [unitGrams, setUnitGrams] = useState(150);
+  // Tiroir "Ce que je ne mange pas" (mémoire profil)
+  const [exclusionsModalOpen, setExclusionsModalOpen] = useState(false);
+  const [exclusionQuery, setExclusionQuery] = useState('');
 
+  // Créateur de recette avec recherche universelle intégrée
   const [customTitle, setCustomTitle] = useState('');
   const [customPrepMin, setCustomPrepMin] = useState(10);
   const [customDraftItems, setCustomDraftItems] = useState([]);
-  const [draftFoodId, setDraftFoodId] = useState('flocons_avoine');
-  const [draftGrams, setDraftGrams] = useState(70);
 
   const [toastMsg, setToastMsg] = useState(null);
 
@@ -130,34 +142,6 @@ export default function NutritionTab({
     setTimeout(() => setToastMsg(null), 2400);
   };
 
-  // Recherche dynamique Open Food Facts (3M+ aliments) dès que l'utilisateur tape >= 2 lettres
-  useEffect(() => {
-    if (drawerTab !== 'foods' || foodSearch.trim().length < 2) {
-      setRemoteFoods([]);
-      setRemoteLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setRemoteLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const results = await searchOpenFoodFacts(foodSearch.trim(), lang, controller.signal);
-        const compatibleRemote = results.filter((f) => isFoodCompatibleWithProfile(f, profile));
-        setRemoteFoods(compatibleRemote);
-      } catch {
-        // Hors-ligne ou requête annulée : repli silencieux sur le référentiel local CIQUAL/USDA
-      } finally {
-        setRemoteLoading(false);
-      }
-    }, 420);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [foodSearch, drawerTab, lang, profile]);
-
   const targets = profile?.targets || {
     kcal: 2200,
     protein: 140,
@@ -165,75 +149,70 @@ export default function NutritionTab({
     fat: 70,
   };
 
+  const dislikedIds = profile?.dislikedFoodIds || [];
+  const favoriteIds = profile?.favoriteRecipeIds || [];
+
   const dayTotals = useMemo(() => computeDayTotals(dayLog), [dayLog]);
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES_DATA], [customRecipes]);
 
-  const compatibleFoods = useMemo(
-    () => getAllFoods().filter((f) => isFoodCompatibleWithProfile(f, profile)),
-    [profile]
+  // Liste des recettes dynamiques (auto-mises à jour selon les exclusions du profil !)
+  const preparedRecipes = useMemo(() => {
+    return allRecipes
+      .map((rec) => {
+        const strictlyCompatible = isRecipeCompatibleWithProfile(rec, profile);
+        if (!strictlyCompatible && exclusionMode === 'hide') {
+          return null;
+        }
+        const liveRec = strictlyCompatible
+          ? { ...rec, swapsMade: [], hasAutoSwaps: false }
+          : getLiveAdaptedRecipe(rec, profile);
+        return {
+          ...liveRec,
+          isFavorite: favoriteIds.includes(rec.id),
+        };
+      })
+      .filter(Boolean)
+      .filter((rec) => {
+        if (onlyFavorites && !rec.isFavorite) return false;
+        if (recipeSearch.trim()) {
+          const q = normalizeText(recipeSearch);
+          const matchTitle = normalizeText(rec.title).includes(q);
+          const matchIng = (rec.ingredients || []).some((ing) => {
+            const f = getFoodById(ing.foodId);
+            return f && normalizeText(f.name).includes(q);
+          });
+          if (!matchTitle && !matchIng) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
+  }, [allRecipes, profile, exclusionMode, favoriteIds, onlyFavorites, recipeSearch]);
+
+  const draftRecipeTotals = useMemo(
+    () => computeRecipeMacros({ ingredients: customDraftItems }, 1),
+    [customDraftItems]
   );
 
-  const filteredLocalFoods = useMemo(() => {
-    if (!foodSearch.trim()) return compatibleFoods.slice(0, 45);
-    const q = normalizeText(foodSearch);
-    return compatibleFoods.filter((f) => normalizeText(f.name).includes(q));
-  }, [compatibleFoods, foodSearch]);
+  const exclusionSearchMatches = useMemo(() => {
+    if (!exclusionQuery.trim()) return [];
+    const q = normalizeText(exclusionQuery);
+    return getAllFoods()
+      .filter((f) => normalizeText(f.name).includes(q) && !dislikedIds.includes(f.id))
+      .slice(0, 12);
+  }, [exclusionQuery, dislikedIds]);
 
-  const filteredRecipes = useMemo(() => {
-    return allRecipes.filter((rec) => {
-      const compatible = isRecipeCompatibleWithProfile(rec, profile);
-      if (!compatible && !showAdaptableRecipes) return false;
-      if (recipeSearch.trim()) {
-        const q = normalizeText(recipeSearch);
-        const matchTitle = normalizeText(rec.title).includes(q);
-        const matchIng = (rec.ingredients || []).some((ing) => {
-          const f = getFoodById(ing.foodId);
-          return f && normalizeText(f.name).includes(q);
-        });
-        if (!matchTitle && !matchIng) return false;
-      }
-      return true;
-    });
-  }, [allRecipes, profile, showAdaptableRecipes, recipeSearch]);
-
-  const handleBarcodeSearch = async (e) => {
-    e.preventDefault();
-    if (!barcodeValue.trim()) return;
-    setRemoteLoading(true);
-    try {
-      const found = await fetchProductByBarcode(barcodeValue.trim());
-      if (found) {
-        await onCacheExternalFood(found);
-        setSelectedFoodObj(found);
-        setUnitGrams(found.defaultGrams || 100);
-        setBarcodePromptOpen(false);
-        setBarcodeValue('');
-      } else {
-        alert('Aucun produit trouvé pour ce code-barres EAN.');
-      }
-    } catch {
-      alert('Recherche code-barres indisponible hors-ligne.');
-    } finally {
-      setRemoteLoading(false);
-    }
-  };
-
-  const handleAddRecipeToMeal = (recipe, autoAdapt = false) => {
+  const handleAddRecipeToMeal = (preparedRec) => {
     if (!drawerMealSlot) return;
-    const baseIngredients = autoAdapt
-      ? adaptRecipeIngredientsToProfile(recipe.ingredients, profile)
-      : recipe.ingredients;
-
-    const scaledItems = baseIngredients.map((ing) => ({
+    const scaledItems = (preparedRec.ingredients || []).map((ing) => ({
       foodId: ing.foodId,
       grams: Math.max(5, Math.round(ing.grams * portionMult)),
     }));
 
     const newEntry = {
       entryId: `meal_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      title: `${recipe.title}${portionMult !== 1 ? ` (${portionMult}x)` : ''}`,
+      title: `${preparedRec.title}${portionMult !== 1 ? ` (${portionMult}x)` : ''}`,
       isRecipe: true,
-      recipeId: recipe.id,
+      recipeId: preparedRec.id,
       portionMultiplier: portionMult,
       items: scaledItems,
     };
@@ -249,24 +228,16 @@ export default function NutritionTab({
     });
 
     setDrawerMealSlot(null);
-    triggerToast('Ajouté');
+    triggerToast('Recette ajoutée');
   };
 
-  const handleAddSingleFood = async (e) => {
-    e.preventDefault();
-    const activeFood = selectedFoodObj || filteredLocalFoods[0];
-    if (!drawerMealSlot || !activeFood) return;
-
-    if (activeFood.sourceRef === 'Open Food Facts') {
-      await onCacheExternalFood(activeFood);
-    }
-
-    const cleanGrams = Math.max(1, Math.round(Number(unitGrams) || 100));
+  const handleAddSingleFoodToSlot = (foodObj, cleanGrams) => {
+    if (!drawerMealSlot || !foodObj) return;
     const newEntry = {
       entryId: `meal_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      title: activeFood.name,
+      title: foodObj.name,
       isRecipe: false,
-      items: [{ foodId: activeFood.id, grams: cleanGrams }],
+      items: [{ foodId: foodObj.id, grams: cleanGrams }],
     };
 
     const currentSlotList = dayLog?.meals?.[drawerMealSlot] || [];
@@ -280,11 +251,58 @@ export default function NutritionTab({
     });
 
     setDrawerMealSlot(null);
-    triggerToast(`${cleanGrams}g ${activeFood.name}`);
+    triggerToast(`+${cleanGrams}g ${foodObj.name}`);
+  };
+
+  // Fusionne un ingrédient (ex: 30g de citron) directement À L'INTÉRIEUR d'une recette/repas déjà posé !
+  const handleAppendIngredientInsideEntry = (foodObj, cleanGrams) => {
+    if (!appendTargetEntry || !foodObj) return;
+    const { slotId, entryId } = appendTargetEntry;
+
+    const updatedSlot = (dayLog.meals[slotId] || []).map((entry) => {
+      if (entry.entryId !== entryId) return entry;
+      const existingIdx = (entry.items || []).findIndex((it) => it.foodId === foodObj.id);
+      const nextItems =
+        existingIdx >= 0
+          ? entry.items.map((it, idx) =>
+              idx === existingIdx ? { ...it, grams: it.grams + cleanGrams } : it
+            )
+          : [...(entry.items || []), { foodId: foodObj.id, grams: cleanGrams }];
+
+      return {
+        ...entry,
+        isRecipe: nextItems.length > 1 ? true : entry.isRecipe,
+        items: nextItems,
+      };
+    });
+
+    onSaveDayLog({
+      ...dayLog,
+      meals: { ...dayLog.meals, [slotId]: updatedSlot },
+    });
+
+    setAppendTargetEntry(null);
+    triggerToast(`+${cleanGrams}g ${foodObj.name} intégré`);
+  };
+
+  const handleSaveEntryAsCustomRecipe = async (entry) => {
+    if (!entry?.items?.length) return;
+    const cleanTitle = entry.title.replace(/\s*\([\d.]+x\)$/, '').trim();
+    await onSaveCustomRecipe({
+      id: entry.recipeId?.startsWith('crecipe_') ? entry.recipeId : undefined,
+      title: entry.recipeId?.startsWith('crecipe_') ? cleanTitle : `${cleanTitle} (Perso)`,
+      mealTypes: ['breakfast', 'lunch', 'snack', 'dinner'],
+      prepMinutes: 10,
+      goalTag: 'Sur-mesure',
+      description: 'Recette personnalisée mise à jour.',
+      ingredients: entry.items.map((it) => ({ foodId: it.foodId, grams: it.grams })),
+      steps: ['Préparer et assembler les ingrédients selon tes goûts.'],
+    });
+    triggerToast('Recette mémorisée !');
   };
 
   const handleUpdateIngredientGrams = (slotId, entryId, itemIdx, nextGrams) => {
-    const safeG = Math.max(5, Math.round(Number(nextGrams) || 5));
+    const safeG = Math.max(1, Math.round(Number(nextGrams) || 5));
     const updatedSlot = (dayLog.meals[slotId] || []).map((entry) => {
       if (entry.entryId !== entryId) return entry;
       return {
@@ -294,6 +312,23 @@ export default function NutritionTab({
         ),
       };
     });
+
+    onSaveDayLog({
+      ...dayLog,
+      meals: { ...dayLog.meals, [slotId]: updatedSlot },
+    });
+  };
+
+  const handleRemoveSingleItemFromEntry = (slotId, entryId, itemIdx) => {
+    const updatedSlot = (dayLog.meals[slotId] || [])
+      .map((entry) => {
+        if (entry.entryId !== entryId) return entry;
+        return {
+          ...entry,
+          items: entry.items.filter((_, idx) => idx !== itemIdx),
+        };
+      })
+      .filter((entry) => entry.items.length > 0);
 
     onSaveDayLog({
       ...dayLog,
@@ -356,19 +391,20 @@ export default function NutritionTab({
       title: customTitle.trim(),
       mealTypes: ['breakfast', 'lunch', 'snack', 'dinner'],
       prepMinutes: Number(customPrepMin) || 10,
-      goalTag: 'Perso',
+      goalTag: 'Sur-mesure',
       description: 'Recette personnalisée.',
       ingredients: customDraftItems,
       steps: ['Assembler et préparer selon tes préférences.'],
     });
+    if (saved && onToggleFavoriteRecipe && !favoriteIds.includes(saved.id)) {
+      onToggleFavoriteRecipe(saved.id);
+    }
     setCustomTitle('');
     setCustomDraftItems([]);
     setDrawerTab('recipes');
-    if (saved) triggerToast('Recette enregistrée');
+    triggerToast('Recette créée & ajoutée aux favoris');
   };
 
-  const activePreviewFood = selectedFoodObj || filteredLocalFoods[0];
-  const selectedUnitPreview = calculateFoodMacros(activePreviewFood, unitGrams);
   const kcalPct = Math.min(100, Math.round((dayTotals.kcal / Math.max(1, targets.kcal)) * 100));
 
   return (
@@ -380,9 +416,9 @@ export default function NutritionTab({
         </div>
       )}
 
-      {/* 1. NAVIGATION DATE */}
-      <div className="flex items-center justify-between px-1">
-        <div className="inline-flex items-center gap-1 bg-[var(--bg-subtle)] p-1 rounded-full border border-[var(--border-subtle)]">
+      {/* 1. NAVIGATION DATE + ACCÈS RAPIDE EXCLUSIONS ALIMENTAIRES */}
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="inline-flex items-center gap-0.5 bg-[var(--bg-subtle)] p-1 rounded-full border border-[var(--border-subtle)]">
           <button
             type="button"
             onClick={() => onChangeDate(shiftDateString(selectedDate, -1))}
@@ -392,7 +428,7 @@ export default function NutritionTab({
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <label className="relative px-3 py-1 cursor-pointer text-xs font-semibold text-[var(--text-primary)]">
+          <label className="relative px-2.5 py-1 cursor-pointer text-xs font-semibold text-[var(--text-primary)]">
             {formatHumanDate(selectedDate, lang)}
             <input
               type="date"
@@ -412,15 +448,32 @@ export default function NutritionTab({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSendFullDayToShopping}
-          disabled={dayTotals.kcal === 0}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[var(--bg-subtle)] disabled:opacity-35 border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
-        >
-          <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
-          {tr(lang, 'to_shopping')}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setExclusionsModalOpen(true)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-xs font-medium transition-colors ${
+              dislikedIds.length > 0
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+            }`}
+            title="Gérer les ingrédients que tu ne manges pas"
+          >
+            <Ban className="w-3.5 h-3.5" />
+            <span>Exclus{dislikedIds.length > 0 ? ` (${dislikedIds.length})` : ''}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSendFullDayToShopping}
+            disabled={dayTotals.kcal === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--bg-subtle)] disabled:opacity-35 border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+            title={tr(lang, 'to_shopping')}
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden xs:inline">{tr(lang, 'to_shopping')}</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. SYNTHÈSE DU JOUR */}
@@ -522,9 +575,11 @@ export default function NutritionTab({
                         const m = calculateFoodMacros(it.foodId, it.grams);
                         acc.kcal += m.kcal;
                         acc.protein += m.protein;
+                        acc.carbs += m.carbs;
+                        acc.fat += m.fat;
                         return acc;
                       },
-                      { kcal: 0, protein: 0 }
+                      { kcal: 0, protein: 0, carbs: 0, fat: 0 }
                     );
 
                     return (
@@ -533,22 +588,55 @@ export default function NutritionTab({
                         className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-3.5 space-y-2.5"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <h4 className="text-xs font-semibold text-[var(--text-primary)]">
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-semibold text-[var(--text-primary)] truncate">
                               {entry.title}
                             </h4>
                             <p className="text-[11px] text-[var(--text-muted)] tabular-nums">
-                              {Math.round(entryTotals.kcal)} kcal · {Math.round(entryTotals.protein)}g P
+                              <strong className="text-[var(--text-primary)]">
+                                {Math.round(entryTotals.kcal)} kcal
+                              </strong>{' '}
+                              · {Math.round(entryTotals.protein)}g P · {Math.round(entryTotals.carbs)}g G ·{' '}
+                              {Math.round(entryTotals.fat)}g L
                             </p>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMealEntry(slot.id, entry.entryId)}
-                            className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-rose-400 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAppendTargetEntry({
+                                  slotId: slot.id,
+                                  entryId: entry.entryId,
+                                  title: entry.title,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[10.5px] font-medium text-emerald-400"
+                              title="Ajouter un ingrédient (ex: citron, sauce, épice) directement dans ce plat"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Ingrédient
+                            </button>
+
+                            {entry.items?.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEntryAsCustomRecipe(entry)}
+                                className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
+                                title="Mémoriser ce plat modifié dans mes recettes"
+                              >
+                                <BookmarkPlus className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMealEntry(slot.id, entry.entryId)}
+                              className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-1.5 pt-1 border-t border-[var(--border-subtle)]">
@@ -563,18 +651,17 @@ export default function NutritionTab({
                               >
                                 <div className="min-w-0 flex-1 truncate">
                                   <span className="text-[var(--text-primary)]">{food.name}</span>
-                                  <span className="text-[10.5px] text-[var(--text-muted)] ml-1.5">
+                                  <span className="text-[10.5px] text-[var(--text-muted)] ml-1">
                                     ({food.state})
                                   </span>
                                 </div>
 
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="flex items-center gap-1 shrink-0">
                                   <div className="inline-flex items-center bg-[var(--bg-subtle)] rounded-lg px-2 py-0.5 border border-[var(--border-subtle)]">
                                     <input
                                       type="number"
-                                      min="5"
+                                      min="1"
                                       max="1500"
-                                      step="5"
                                       value={it.grams}
                                       onChange={(e) =>
                                         handleUpdateIngredientGrams(
@@ -600,10 +687,27 @@ export default function NutritionTab({
                                       )
                                     }
                                     className="p-1.5 rounded-lg bg-[var(--bg-subtle)] text-emerald-400 border border-[var(--border-subtle)]"
-                                    title="Remplacer"
+                                    title="Remplacer par un équivalent"
                                   >
                                     <ArrowLeftRight className="w-3 h-3" />
                                   </button>
+
+                                  {entry.items.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleRemoveSingleItemFromEntry(
+                                          slot.id,
+                                          entry.entryId,
+                                          idx
+                                        )
+                                      }
+                                      className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400"
+                                      title="Retirer cet ingrédient du plat"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -619,11 +723,13 @@ export default function NutritionTab({
         })}
       </div>
 
-      {/* MODALE D'AJOUT : RECETTES | RECHERCHE UNIVERSELLE CIQUAL + OPEN FOOD FACTS | CRÉER */}
+      {/* =================================================================== */}
+      {/* MODALE 1 : AJOUTER UN REPAS / ALIMENT UNIVERSEL / CRÉER RECETTE     */}
+      {/* =================================================================== */}
       {drawerMealSlot && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-xl max-h-[88vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+          <div className="w-full max-w-xl max-h-[90vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                 {MEAL_SLOTS.find((s) => s.id === drawerMealSlot)?.label}
               </h3>
@@ -636,12 +742,12 @@ export default function NutritionTab({
               </button>
             </div>
 
-            <div className="px-4 py-3 border-b border-[var(--border-subtle)] shrink-0">
+            <div className="px-4 py-2.5 border-b border-[var(--border-subtle)] shrink-0">
               <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)]">
                 {[
-                  { id: 'recipes', label: `Recettes (${RECIPES_DATA.length})` },
-                  { id: 'foods', label: 'Aliments (3M+)' },
-                  { id: 'create_recipe', label: 'Créer' },
+                  { id: 'recipes', label: `Recettes (${allRecipes.length})` },
+                  { id: 'foods', label: 'Ingrédients (3M+)' },
+                  { id: 'create_recipe', label: 'Créer recette' },
                 ].map((t) => {
                   const active = drawerTab === t.id;
                   return (
@@ -662,7 +768,7 @@ export default function NutritionTab({
               </div>
             </div>
 
-            {/* ONGLET A : RECETTES */}
+            {/* ONGLET A : RECETTES DYNAMIQUES (FAVORIS + AUTO-ADAPTATION AUX EXCLUSIONS) */}
             {drawerTab === 'recipes' && (
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -672,7 +778,7 @@ export default function NutritionTab({
                       type="text"
                       value={recipeSearch}
                       onChange={(e) => setRecipeSearch(e.target.value)}
-                      placeholder="Rechercher recette ou ingrédient..."
+                      placeholder="Rechercher une recette ou un ingrédient..."
                       className="input-dark !pl-9 !py-2 text-xs"
                     />
                   </div>
@@ -695,270 +801,232 @@ export default function NutritionTab({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between px-1 text-[11px] text-[var(--text-muted)]">
-                  <span>{filteredRecipes.length} recettes compatibles</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdaptableRecipes((v) => !v)}
-                    className="underline"
-                  >
-                    {showAdaptableRecipes ? 'Masquer auto-adaptables' : 'Inclure auto-adaptables'}
-                  </button>
-                </div>
-
-                {filteredRecipes.map((rec) => {
-                  const isCompatible = isRecipeCompatibleWithProfile(rec, profile);
-                  const macros = computeRecipeMacros(rec, portionMult);
-                  const detailsOpen = expandedRecipeId === rec.id;
-
-                  return (
-                    <div
-                      key={rec.id}
-                      className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-4 space-y-2.5"
+                {/* Barre de filtres Favoris & Exclusions sans surcharge */}
+                <div className="flex items-center justify-between gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setOnlyFavorites((v) => !v)}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                        onlyFavorites
+                          ? 'bg-amber-400/20 border-amber-400/50 text-amber-300 font-semibold'
+                          : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                      }`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-                            <span className="text-emerald-400 font-medium">{rec.goalTag}</span>
-                            <span>·</span>
-                            <span>{rec.prepMinutes} min</span>
-                          </div>
-                          <h4 className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
-                            {rec.title}
-                          </h4>
-                          <p className="text-xs text-[var(--text-secondary)] mt-1 tabular-nums">
-                            <strong className="text-[var(--text-primary)]">{macros.kcal} kcal</strong> ·{' '}
-                            {macros.protein}g P · {macros.carbs}g G · {macros.fat}g L
-                          </p>
-                        </div>
+                      <Heart
+                        className={`w-3 h-3 ${onlyFavorites ? 'fill-current text-amber-400' : ''}`}
+                      />
+                      Favoris ({favoriteIds.length})
+                    </button>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {rec.isCustom && (
-                            <button
-                              type="button"
-                              onClick={() => onDeleteCustomRecipe(rec.id)}
-                              className="p-2 text-[var(--text-muted)] hover:text-rose-400"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleAddRecipeToMeal(rec, !isCompatible)}
-                            className="btn-primary !py-1.5 !px-3.5 !text-xs"
-                          >
-                            {isCompatible ? tr(lang, 'add') : 'Adapter'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-1">
-                        <span className="truncate">
-                          {(rec.ingredients || [])
-                            .map((ing) => {
-                              const f = getFoodById(ing.foodId);
-                              return f ? `${Math.round(ing.grams * portionMult)}g ${f.name}` : '';
-                            })
-                            .filter(Boolean)
-                            .join(', ')}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedRecipeId(detailsOpen ? null : rec.id)}
-                          className="shrink-0 ml-2 underline"
-                        >
-                          {detailsOpen ? 'Fermer' : 'Étapes'}
-                        </button>
-                      </div>
-
-                      {detailsOpen && rec.steps && (
-                        <ol className="pt-2 border-t border-[var(--border-subtle)] space-y-1 text-xs text-[var(--text-secondary)] list-decimal list-inside">
-                          {rec.steps.map((st, idx) => (
-                            <li key={idx}>{st}</li>
-                          ))}
-                        </ol>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* ONGLET B : RECHERCHE DYNAMIQUE CIQUAL / USDA + 3M+ OPEN FOOD FACTS + CODE-BARRES */}
-            {drawerTab === 'foods' && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={foodSearch}
-                      onChange={(e) => setFoodSearch(e.target.value)}
-                      placeholder={tr(lang, 'search_food_world')}
-                      className="input-dark !pl-10 !py-2 text-xs"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setExclusionsModalOpen(true)}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                        dislikedIds.length > 0
+                          ? 'bg-rose-500/15 border-rose-500/35 text-rose-400'
+                          : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      <Ban className="w-3 h-3" />
+                      Exclure ingrédient{dislikedIds.length > 0 ? ` (${dislikedIds.length})` : ''}
+                    </button>
                   </div>
+
                   <button
                     type="button"
-                    onClick={() => setBarcodePromptOpen((v) => !v)}
-                    className="btn-secondary !py-2 !px-3 !text-xs shrink-0"
-                    title="Rechercher un code-barres EAN-13"
+                    onClick={() =>
+                      setExclusionMode((m) => (m === 'adapt' ? 'hide' : 'adapt'))
+                    }
+                    className="text-[11px] text-emerald-400 font-medium whitespace-nowrap underline"
                   >
-                    <ScanBarcode className="w-4 h-4 text-emerald-400" />
-                    <span className="hidden xs:inline">{tr(lang, 'scan_barcode')}</span>
+                    {exclusionMode === 'adapt' ? 'Mode : Auto-adapter' : 'Mode : Masquer'}
                   </button>
                 </div>
 
-                {barcodePromptOpen && (
-                  <form onSubmit={handleBarcodeSearch} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={barcodeValue}
-                      onChange={(e) => setBarcodeValue(e.target.value)}
-                      placeholder="Code-barres EAN (ex: 3329770077003)"
-                      className="input-dark !py-2 text-xs tabular-nums"
-                    />
-                    <button type="submit" className="btn-accent !py-2 !px-3.5 !text-xs shrink-0">
-                      Chercher
-                    </button>
-                  </form>
-                )}
+                {preparedRecipes.length === 0 ? (
+                  <p className="text-center py-8 text-xs text-[var(--text-muted)]">
+                    Aucune recette trouvée avec ces filtres.
+                  </p>
+                ) : (
+                  preparedRecipes.map((rec) => {
+                    const macros = computeRecipeMacros(rec, portionMult);
+                    const detailsOpen = expandedRecipeId === rec.id;
 
-                <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                  {/* Résultats locaux certifiés CIQUAL / USDA */}
-                  {filteredLocalFoods.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[10.5px] font-semibold text-[var(--text-muted)] px-1">
-                        {tr(lang, 'local_results')}
-                      </p>
-                      {filteredLocalFoods.map((f) => {
-                        const active = activePreviewFood?.id === f.id;
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedFoodObj(f);
-                              setUnitGrams(f.defaultGrams || 100);
-                            }}
-                            className={`w-full text-left px-3.5 py-2 rounded-2xl text-xs flex items-center justify-between transition-all ${
-                              active
-                                ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-semibold'
-                                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
-                            }`}
-                          >
-                            <span className="truncate">
-                              {f.name}{' '}
-                              <span className="text-[10.5px] text-[var(--text-muted)]">
-                                ({f.state})
-                              </span>
-                            </span>
-                            <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0 ml-2">
-                              {f.per100g.kcal} kcal
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Résultats mondiaux en direct Open Food Facts */}
-                  {(remoteLoading || remoteFoods.length > 0) && (
-                    <div className="space-y-1 pt-2 border-t border-[var(--border-subtle)]">
-                      <p className="text-[10.5px] font-semibold text-emerald-400 px-1 flex items-center gap-1.5">
-                        <Globe className="w-3 h-3" />
-                        {tr(lang, 'online_results')}
-                        {remoteLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                      </p>
-                      {remoteFoods.map((f) => {
-                        const active = activePreviewFood?.id === f.id;
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedFoodObj(f);
-                              setUnitGrams(f.defaultGrams || 100);
-                            }}
-                            className={`w-full text-left px-3.5 py-2 rounded-2xl text-xs flex items-center justify-between transition-all ${
-                              active
-                                ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-semibold'
-                                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
-                            }`}
-                          >
-                            <span className="truncate flex items-center gap-1.5">
-                              {f.nutriscore && (
-                                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-400/20 text-emerald-400">
-                                  {f.nutriscore}
+                    return (
+                      <div
+                        key={rec.id}
+                        className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-4 space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] flex-wrap">
+                              <span className="text-emerald-400 font-medium">{rec.goalTag}</span>
+                              <span>·</span>
+                              <span>{rec.prepMinutes} min</span>
+                              {rec.hasAutoSwaps && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-emerald-400/15 text-emerald-400 text-[10px] font-semibold">
+                                  <RefreshCw className="w-2.5 h-2.5" />
+                                  Adaptée à tes goûts
                                 </span>
                               )}
-                              <span className="truncate">{f.name}</span>
-                            </span>
-                            <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0 ml-2">
-                              {f.per100g.kcal} kcal · {f.per100g.protein}g P
-                            </span>
+                            </div>
+                            <h4 className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                              {rec.title}
+                            </h4>
+                            <p className="text-xs text-[var(--text-secondary)] mt-1 tabular-nums">
+                              <strong className="text-[var(--text-primary)]">
+                                {macros.kcal} kcal
+                              </strong>{' '}
+                              · {macros.protein}g P · {macros.carbs}g G · {macros.fat}g L
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {onToggleFavoriteRecipe && (
+                              <button
+                                type="button"
+                                onClick={() => onToggleFavoriteRecipe(rec.id)}
+                                className={`p-2 rounded-full transition-colors ${
+                                  rec.isFavorite
+                                    ? 'text-amber-400 bg-amber-400/15'
+                                    : 'text-[var(--text-muted)] hover:text-amber-400'
+                                }`}
+                                title={
+                                  rec.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'
+                                }
+                              >
+                                <Heart
+                                  className={`w-4 h-4 ${rec.isFavorite ? 'fill-current' : ''}`}
+                                />
+                              </button>
+                            )}
+
+                            {rec.isCustom && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCustomRecipe(rec.id)}
+                                className="p-2 text-[var(--text-muted)] hover:text-rose-400"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleAddRecipeToMeal(rec)}
+                              className="btn-primary !py-1.5 !px-3.5 !text-xs"
+                            >
+                              {tr(lang, 'add')}
+                            </button>
+                          </div>
+                        </div>
+
+                        {rec.hasAutoSwaps && (
+                          <p className="text-[11px] text-emerald-400/90">
+                            Remplacement auto :{' '}
+                            {rec.swapsMade
+                              .map((s) => `${s.swappedFrom} → ${s.swappedTo}`)
+                              .join(', ')}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-1">
+                          <span className="truncate">
+                            {(rec.ingredients || [])
+                              .map((ing) => {
+                                const f = getFoodById(ing.foodId);
+                                return f ? `${Math.round(ing.grams * portionMult)}g ${f.name}` : '';
+                              })
+                              .filter(Boolean)
+                              .join(', ')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRecipeId(detailsOpen ? null : rec.id)}
+                            className="shrink-0 ml-2 underline"
+                          >
+                            {detailsOpen ? 'Masquer' : 'Détails'}
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                        </div>
 
-                {activePreviewFood && (
-                  <form
-                    onSubmit={handleAddSingleFood}
-                    className="rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-4 space-y-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                          {activePreviewFood.name}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)] tabular-nums mt-0.5">
-                          {selectedUnitPreview.kcal} kcal · {selectedUnitPreview.protein}g P ·{' '}
-                          {selectedUnitPreview.carbs}g G · {selectedUnitPreview.fat}g L
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <input
-                          type="number"
-                          min="1"
-                          max="2000"
-                          value={unitGrams}
-                          onChange={(e) => setUnitGrams(e.target.value)}
-                          className="w-20 input-dark !py-1.5 text-right font-semibold tabular-nums"
-                        />
-                        <span className="text-xs text-[var(--text-muted)]">g</span>
-                      </div>
-                    </div>
+                        {detailsOpen && (
+                          <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2">
+                            <div className="space-y-1">
+                              {(rec.ingredients || []).map((ing, idx) => {
+                                const f = getFoodById(ing.foodId);
+                                if (!f) return null;
+                                return (
+                                  <div
+                                    key={`${ing.foodId}_${idx}`}
+                                    className="flex items-center justify-between text-xs py-0.5"
+                                  >
+                                    <span className="text-[var(--text-primary)]">
+                                      <strong>{Math.round(ing.grams * portionMult)}g</strong>{' '}
+                                      {f.name}
+                                    </span>
+                                    {onToggleDislikedFood && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onToggleDislikedFood(f.id);
+                                          triggerToast(`${f.name} exclu et remplacé !`);
+                                        }}
+                                        className="text-[10.5px] text-[var(--text-muted)] hover:text-rose-400 inline-flex items-center gap-1"
+                                      >
+                                        <Ban className="w-3 h-3" />
+                                        Exclure
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
 
-                    <button type="submit" className="btn-accent w-full">
-                      {tr(lang, 'add')}
-                    </button>
-                  </form>
+                            {rec.steps && (
+                              <ol className="pt-2 border-t border-[var(--border-subtle)] space-y-1 text-xs text-[var(--text-secondary)] list-decimal list-inside">
+                                {rec.steps.map((st, idx) => (
+                                  <li key={idx}>{st}</li>
+                                ))}
+                              </ol>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}
 
-            {/* ONGLET C : CRÉATION DE RECETTE */}
+            {/* ONGLET B : PANEL INTÉGRAL D'INGRÉDIENTS (250+ HORS-LIGNE + 3M+ EN LIGNE) */}
+            {drawerTab === 'foods' && (
+              <div className="flex-1 overflow-y-auto p-4">
+                <SmartFoodPicker
+                  profile={profile}
+                  lang={lang}
+                  onSelectFoodWithGrams={handleAddSingleFoodToSlot}
+                  onCacheExternalFood={onCacheExternalFood}
+                  onToggleDislikedFood={onToggleDislikedFood}
+                  actionLabel="Ajouter au repas"
+                />
+              </div>
+            )}
+
+            {/* ONGLET C : CRÉATION DE RECETTE AVEC AUTO-DÉTECTION UNIVERSELLE DES MACROS */}
             {drawerTab === 'create_recipe' && (
-              <form
-                onSubmit={handleCreateCustomRecipeSubmit}
-                className="flex-1 overflow-y-auto p-4 space-y-4"
-              >
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="col-span-2">
                     <label className="block text-xs text-[var(--text-secondary)] mb-1">
-                      Nom
+                      Nom de ta recette
                     </label>
                     <input
                       type="text"
-                      required
                       value={customTitle}
                       onChange={(e) => setCustomTitle(e.target.value)}
-                      placeholder="Ex: Bowl Post-Séance"
-                      className="input-dark"
+                      placeholder="Ex: Saumon grillé au citron"
+                      className="input-dark !py-2 text-xs"
                     />
                   </div>
                   <div>
@@ -971,87 +1039,254 @@ export default function NutritionTab({
                       max="120"
                       value={customPrepMin}
                       onChange={(e) => setCustomPrepMin(e.target.value)}
-                      className="input-dark tabular-nums"
+                      className="input-dark !py-2 text-xs tabular-nums"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <select
-                    value={draftFoodId}
-                    onChange={(e) => {
-                      const f = getFoodById(e.target.value);
-                      setDraftFoodId(e.target.value);
-                      if (f) setDraftGrams(f.defaultGrams || 100);
+                {/* Liste des ingrédients ajoutés + calcul automatique des macros totales en direct */}
+                {customDraftItems.length > 0 && (
+                  <div className="rounded-2xl bg-emerald-400/10 border border-emerald-400/25 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Macros calculées ({customDraftItems.length} ingr.)
+                      </span>
+                      <span className="font-bold text-emerald-400 tabular-nums">
+                        {draftRecipeTotals.kcal} kcal · {draftRecipeTotals.protein}g P ·{' '}
+                        {draftRecipeTotals.carbs}g G · {draftRecipeTotals.fat}g L
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 pt-1 border-t border-emerald-400/20">
+                      {customDraftItems.map((it, idx) => {
+                        const f = getFoodById(it.foodId);
+                        const m = calculateFoodMacros(it.foodId, it.grams);
+                        return (
+                          <div
+                            key={`${it.foodId}_${idx}`}
+                            className="flex items-center justify-between text-xs py-0.5"
+                          >
+                            <span className="text-[var(--text-primary)] truncate">
+                              <strong>{it.grams}g</strong> {f?.name}{' '}
+                              <span className="text-[10.5px] text-[var(--text-muted)]">
+                                ({m.kcal} kcal)
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCustomDraftItems((prev) =>
+                                  prev.filter((_, i) => i !== idx)
+                                )
+                              }
+                              className="text-[var(--text-muted)] hover:text-rose-400 ml-2"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!customTitle.trim()}
+                      onClick={handleCreateCustomRecipeSubmit}
+                      className="btn-accent w-full !py-2.5 !text-xs mt-1"
+                    >
+                      <Check className="w-4 h-4" />
+                      Enregistrer la recette ({draftRecipeTotals.kcal} kcal)
+                    </button>
+                  </div>
+                )}
+
+                <div className="pt-1 border-t border-[var(--border-subtle)]">
+                  <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
+                    Ajouter n’importe quel ingrédient (détection auto des macros) :
+                  </p>
+                  <SmartFoodPicker
+                    profile={profile}
+                    lang={lang}
+                    compact
+                    onSelectFoodWithGrams={(foodObj, cleanGrams) => {
+                      setCustomDraftItems((prev) => {
+                        const exists = prev.findIndex((x) => x.foodId === foodObj.id);
+                        if (exists >= 0) {
+                          return prev.map((x, idx) =>
+                            idx === exists ? { ...x, grams: x.grams + cleanGrams } : x
+                          );
+                        }
+                        return [...prev, { foodId: foodObj.id, grams: cleanGrams }];
+                      });
+                      triggerToast(`+${cleanGrams}g ${foodObj.name}`);
                     }}
-                    className="input-dark flex-1 !py-2 text-xs"
-                  >
-                    {compatibleFoods.map((f) => (
-                      <option key={f.id} value={f.id} className="bg-zinc-900 text-white">
-                        {f.name} ({f.state})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="5"
-                    max="1500"
-                    value={draftGrams}
-                    onChange={(e) => setDraftGrams(e.target.value)}
-                    className="w-20 input-dark !py-2 text-xs text-right tabular-nums"
+                    onCacheExternalFood={onCacheExternalFood}
+                    actionLabel="Intégrer à la recette"
                   />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCustomDraftItems((prev) => [
-                        ...prev,
-                        { foodId: draftFoodId, grams: Math.max(5, Number(draftGrams) || 50) },
-                      ])
-                    }
-                    className="btn-secondary !py-2 !px-3"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODALE 2 : INTÉGRER UN INGRÉDIENT DANS UN PLAT EXISTANT             */}
+      {/* =================================================================== */}
+      {appendTargetEntry && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-xl max-h-[86vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                  Ajouter dans « {appendTargetEntry.title} »
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Les calories et macros du plat se mettront à jour automatiquement
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAppendTargetEntry(null)}
+                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)] shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <SmartFoodPicker
+                profile={profile}
+                lang={lang}
+                onSelectFoodWithGrams={handleAppendIngredientInsideEntry}
+                onCacheExternalFood={onCacheExternalFood}
+                actionLabel="Intégrer au plat"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODALE 3 : MÉMOIRE PROFIL — INGRÉDIENTS EXCLUS ("JE NE MANGE PAS")   */}
+      {/* =================================================================== */}
+      {exclusionsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-md max-h-[85vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  Ingrédients que je ne mange pas
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Mémorisé sur ton profil · Les recettes s’adaptent toutes seules
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExclusionsModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-4 space-y-4">
+              {/* Recherche rapide d'ingrédient à exclure */}
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={exclusionQuery}
+                    onChange={(e) => setExclusionQuery(e.target.value)}
+                    placeholder="Exclure un aliment (ex: brocoli, coriandre, thon...)"
+                    className="input-dark !pl-9 !py-2 text-xs"
+                  />
                 </div>
 
-                {customDraftItems.length > 0 && (
-                  <div className="space-y-1.5">
-                    {customDraftItems.map((it, idx) => {
-                      const f = getFoodById(it.foodId);
+                {exclusionSearchMatches.length > 0 && (
+                  <div className="max-h-36 overflow-y-auto rounded-2xl bg-[var(--bg-subtle)] p-1.5 space-y-1">
+                    {exclusionSearchMatches.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          if (onToggleDislikedFood) onToggleDislikedFood(f.id);
+                          setExclusionQuery('');
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-xl text-xs hover:bg-[var(--bg-app)] flex items-center justify-between text-[var(--text-primary)]"
+                      >
+                        <span>{f.name}</span>
+                        <span className="text-[11px] text-rose-400 font-medium">+ Exclure</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Aliments actuellement exclus */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-[var(--text-secondary)]">
+                  Mes exclusions actives ({dislikedIds.length})
+                </p>
+                {dislikedIds.length === 0 ? (
+                  <p className="text-xs text-[var(--text-muted)] py-2">
+                    Aucun ingrédient exclu pour le moment.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {dislikedIds.map((id) => {
+                      const f = getFoodById(id);
                       return (
-                        <div
-                          key={`${it.foodId}_${idx}`}
-                          className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-[var(--bg-subtle)] text-xs"
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => onToggleDislikedFood && onToggleDislikedFood(id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/35 text-xs font-medium text-rose-400"
                         >
-                          <span>
-                            <strong>{it.grams}g</strong> {f?.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCustomDraftItems((prev) =>
-                                prev.filter((_, i) => i !== idx)
-                              )
-                            }
-                            className="text-[var(--text-muted)] hover:text-rose-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                          <span>{f?.name || id}</span>
+                          <X className="w-3 h-3" />
+                        </button>
                       );
                     })}
                   </div>
                 )}
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={!customTitle.trim() || customDraftItems.length === 0}
-                  className="btn-accent w-full"
-                >
-                  Enregistrer la recette
-                </button>
-              </form>
-            )}
+              {/* Suggestions fréquentes en 1 tap */}
+              <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Exclusions fréquentes en 1 clic :
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {COMMON_EXCLUSION_SUGGESTIONS.filter((id) => !dislikedIds.includes(id)).map(
+                    (id) => {
+                      const f = getFoodById(id);
+                      if (!f) return null;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => onToggleDislikedFood && onToggleDislikedFood(id)}
+                          className="px-2.5 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] hover:text-rose-400 transition-colors"
+                        >
+                          + {f.name}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setExclusionsModalOpen(false)}
+                className="btn-accent w-full !py-2.5 !text-xs"
+              >
+                Appliquer à mes recettes
+              </button>
+            </div>
           </div>
         </div>
       )}

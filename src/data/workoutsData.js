@@ -1,4 +1,13 @@
-// Bibliothèque complète de 7 programmes sportifs universels + catalogue étendu d'exercices
+// Bibliothèque complète de 10 programmes sportifs universels + catalogue enrichi d'exercices multi-matériels
+import {
+  EQUIPMENT_OPTIONS,
+  DISCIPLINE_CATEGORIES,
+  MUSCLE_FILTER_GROUPS,
+  EXTENDED_WORKOUT_PROGRAMS,
+  EXTENDED_EXTRA_EXERCISES,
+} from './extendedWorkoutsCatalog.js';
+
+export { EQUIPMENT_OPTIONS, DISCIPLINE_CATEGORIES, MUSCLE_FILTER_GROUPS };
 
 export const INTENSITY_MODES = [
   {
@@ -1241,8 +1250,117 @@ const EXTRA_EXERCISES = [
     cue: 'Hanches fixes, enroule uniquement la colonne thoracique.',
     programCategory: 'Musculation',
   },
+  ...EXTENDED_EXTRA_EXERCISES,
 ];
 
+function inferEquipmentTagsFromText(name = '', fallbackText = '') {
+  const txt = `${name} ${fallbackText}`.toLowerCase();
+  const tags = new Set();
+
+  if (txt.includes('chaise romaine')) tags.add('roman_chair');
+  if (txt.includes('traction') || txt.includes('suspendu') || txt.includes('chin-up')) {
+    tags.add('pullup_bar');
+    tags.add('roman_chair');
+  }
+  if (txt.includes('dip') || txt.includes('parallette')) {
+    tags.add('dip_bars');
+    tags.add('roman_chair');
+  }
+  if (txt.includes('elastique') || txt.includes('élastique') || txt.includes('band')) {
+    tags.add('bands');
+  }
+  if (txt.includes('anneau') || txt.includes('trx') || txt.includes('sangle') || txt.includes('ring')) {
+    tags.add('trx_rings');
+  }
+  if (txt.includes('haltere') || txt.includes('haltère') || txt.includes('goblet')) {
+    tags.add('dumbbells');
+  }
+  if (txt.includes('kettlebell') || txt.includes('kb ')) {
+    tags.add('kettlebell');
+  }
+  if (txt.includes('banc') || txt.includes('incline') || txt.includes('incliné') || txt.includes('bulgare') || txt.includes('hip thrust')) {
+    tags.add('bench');
+  }
+  if (txt.includes('barre') && !txt.includes('traction') && !txt.includes('suspendu') && !txt.includes('paralle')) {
+    tags.add('barbell');
+  }
+  if (txt.includes('poulie') || txt.includes('corde') && !txt.includes('sauter') || txt.includes('face pull') || txt.includes('cable')) {
+    tags.add('cables');
+  }
+  if (txt.includes('machine') || txt.includes('presse') || txt.includes('leg curl') || txt.includes('leg extension') || txt.includes('pec deck') || txt.includes('hack squat')) {
+    tags.add('machines');
+  }
+  if (txt.includes('ab wheel') || txt.includes('roue') || txt.includes('swiss ball')) {
+    tags.add('ab_wheel_ball');
+  }
+  if (txt.includes('corde à sauter') || txt.includes('rameur') || txt.includes('bike')) {
+    tags.add('cardio_gear');
+  }
+
+  if (tags.size === 0 || txt.includes('aucun matériel') || txt.includes('tapis de sol') || txt.includes('poids du corps')) {
+    if (tags.size === 0) tags.add('none');
+  }
+
+  return Array.from(tags);
+}
+
+function inferMuscleGroupKey(muscleStr = '', nameStr = '') {
+  const m = `${muscleStr} ${nameStr}`.toLowerCase();
+  if (m.includes('pector') || m.includes('pec ') || m.includes('pompe')) return 'pectoraux';
+  if (m.includes('dorsal') || m.includes('dos') || m.includes('rhombo') || m.includes('rowing') || m.includes('traction')) return 'dos';
+  if (m.includes('epaul') || m.includes('épaul') || m.includes('delto') || m.includes('militaire') || m.includes('pike')) return 'epaules';
+  if (m.includes('biceps') || m.includes('triceps') || m.includes('bras') || m.includes('curl')) return 'bras';
+  if (m.includes('quadri') || m.includes('ischio') || m.includes('fessier') || m.includes('jambe') || m.includes('mollet') || m.includes('adduct') || m.includes('squat') || m.includes('fente')) return 'jambes_fessiers';
+  if (m.includes('abdo') || m.includes('gainage') || m.includes('oblique') || m.includes('transverse') || m.includes('lombaire') || m.includes('core') || m.includes('planche')) return 'abdos';
+  return 'full_cardio';
+}
+
+function inferProgramDiscipline(prog) {
+  if (prog.discipline) return prog.discipline;
+  if (prog.id === 'prog_fullbody_bw') return 'bodyweight';
+  if (prog.id === 'prog_home_db_kb') return 'bands_home';
+  if (prog.id === 'prog_hiit_core') return 'hiit_cardio';
+  if (prog.id === 'prog_mobility_posture') return 'mobility_core';
+  return 'gym_strength';
+}
+
+// Ajout des programmes étendus (Callisthénie & Chaise Romaine, Full Élastiques, Anneaux & TRX)
+WORKOUT_PROGRAMS.push(...EXTENDED_WORKOUT_PROGRAMS);
+
+// Enrichissement automatique uniforme des 10 programmes
+WORKOUT_PROGRAMS.forEach((prog) => {
+  prog.discipline = inferProgramDiscipline(prog);
+  const progEqSet = new Set(prog.equipmentTags || []);
+  prog.workouts.forEach((wk) => {
+    const wkEqSet = new Set(wk.equipmentTags || []);
+    wk.exercises.forEach((ex) => {
+      if (!ex.discipline) {
+        if (
+          ex.name.toLowerCase().includes('traction') ||
+          ex.name.toLowerCase().includes('dips') ||
+          ex.name.toLowerCase().includes('hollow') ||
+          ex.name.toLowerCase().includes('pike')
+        ) {
+          ex.discipline = prog.discipline === 'bodyweight' ? 'calisthenics' : prog.discipline;
+        } else {
+          ex.discipline = prog.discipline;
+        }
+      }
+      if (!Array.isArray(ex.equipmentTags) || ex.equipmentTags.length === 0) {
+        ex.equipmentTags = inferEquipmentTagsFromText(ex.name, wk.equipment);
+      }
+      ex.muscleGroup = inferMuscleGroupKey(ex.muscle, ex.name);
+      ex.equipmentTags.forEach((t) => {
+        wkEqSet.add(t);
+        progEqSet.add(t);
+      });
+    });
+    wk.equipmentTags = Array.from(wkEqSet);
+  });
+  prog.equipmentTags = Array.from(progEqSet);
+});
+
+const seenExIds = new Set();
 export const EXERCISE_CATALOG = [
   ...WORKOUT_PROGRAMS.flatMap((prog) =>
     prog.workouts.flatMap((wk) =>
@@ -1252,8 +1370,26 @@ export const EXERCISE_CATALOG = [
       }))
     )
   ),
-  ...EXTRA_EXERCISES,
-];
+  ...EXTRA_EXERCISES.map((ex) => ({
+    ...ex,
+    discipline: ex.discipline || 'gym_strength',
+    equipmentTags:
+      Array.isArray(ex.equipmentTags) && ex.equipmentTags.length > 0
+        ? ex.equipmentTags
+        : inferEquipmentTagsFromText(ex.name, ex.programCategory || ''),
+    muscleGroup: inferMuscleGroupKey(ex.muscle, ex.name),
+  })),
+].filter((ex) => {
+  if (seenExIds.has(ex.id)) return false;
+  seenExIds.add(ex.id);
+  return true;
+});
+
+export function matchesSelectedEquipment(itemEquipmentTags = [], selectedEquipment = []) {
+  if (!Array.isArray(selectedEquipment) || selectedEquipment.length === 0) return true;
+  if (!Array.isArray(itemEquipmentTags) || itemEquipmentTags.length === 0) return true;
+  return itemEquipmentTags.some((tag) => selectedEquipment.includes(tag));
+}
 
 export function buildActiveWorkoutExercises(workout, intensityMode = 'normal') {
   return (workout.exercises || []).map((ex) => {

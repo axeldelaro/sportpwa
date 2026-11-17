@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, Ban } from 'lucide-react';
 import { computeSubstitutions, normalizeText } from '../utils/substitutionEngine';
+import { isFoodDislikedByProfile } from '../data/foodDatabase';
 
 export default function SubstitutionModal({
   isOpen,
@@ -9,6 +10,7 @@ export default function SubstitutionModal({
   profile,
   onClose,
   onConfirmSwap,
+  onToggleDislikedFood,
 }) {
   const [mode, setMode] = useState('dominant_macro');
   const [grams, setGrams] = useState(initialGrams || 100);
@@ -57,6 +59,22 @@ export default function SubstitutionModal({
               Référence : {sourceMacros.kcal} kcal · {sourceMacros.protein}g P ·{' '}
               {sourceMacros.carbs}g G · {sourceMacros.fat}g L
             </p>
+            {onToggleDislikedFood && (
+              <button
+                type="button"
+                onClick={() => onToggleDislikedFood(sourceFood.id)}
+                className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                  isFoodDislikedByProfile(sourceFood, profile)
+                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                    : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-rose-400'
+                }`}
+              >
+                <Ban className="w-3 h-3" />
+                {isFoodDislikedByProfile(sourceFood, profile)
+                  ? 'Aliment exclu de mon profil (cliquer pour réautoriser)'
+                  : `Je ne mange pas de ${sourceFood.name} (mémoriser)`}
+              </button>
+            )}
           </div>
           <button
             type="button"

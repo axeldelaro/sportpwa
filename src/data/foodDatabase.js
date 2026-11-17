@@ -1,4 +1,5 @@
-// Base nutritionnelle 100% locale — 150 aliments complets (valeurs ANSES Ciqual / USDA pour 100g)
+// Base nutritionnelle 100% locale — +245 aliments complets (valeurs ANSES Ciqual / USDA pour 100g)
+import { EXTENDED_FOODS_CATALOG } from './extendedFoodsCatalog.js';
 
 export const AISLE_CATEGORIES = [
   'Viandes, Poissons & Protéines végétales',
@@ -56,6 +57,12 @@ export const SWAP_GROUP_META = {
     dominantMacro: 'carbs',
     macroLabel: 'Glucides',
     relatedGroups: ['glucides_complexes'],
+  },
+  condiments_epicerie: {
+    label: 'Condiments, Sauces & Aromates',
+    dominantMacro: 'kcal',
+    macroLabel: 'Calories',
+    relatedGroups: ['legumes', 'fruits'],
   },
 };
 
@@ -1601,10 +1608,11 @@ export const FOOD_DATABASE = [
     per100g: { kcal: 262, protein: 0.0, carbs: 67.0, fat: 0.1, fiber: 0.0 },
     tags: [],
   },
+  ...EXTENDED_FOODS_CATALOG,
 ];
 
 const FOOD_MAP = new Map(
-  FOOD_DATABASE.map((f) => [f.id, { ...f, sourceRef: 'ANSES CIQUAL / USDA' }])
+  FOOD_DATABASE.map((f) => [f.id, { ...f, sourceRef: f.sourceRef || 'ANSES CIQUAL / USDA' }])
 );
 const EXTERNAL_FOOD_LIST = [];
 
@@ -1645,9 +1653,23 @@ export function calculateFoodMacros(foodOrId, grams = 100) {
   };
 }
 
-export function isFoodCompatibleWithProfile(food, profile) {
+export function isFoodDislikedByProfile(foodOrId, profile) {
+  if (!profile || !Array.isArray(profile.dislikedFoodIds)) return false;
+  const id = typeof foodOrId === 'string' ? foodOrId : foodOrId?.id;
+  return Boolean(id && profile.dislikedFoodIds.includes(id));
+}
+
+export function isFoodCompatibleWithProfile(food, profile, options = {}) {
   if (!food) return false;
   if (!profile) return true;
+
+  if (
+    !options.ignoreDislikes &&
+    Array.isArray(profile.dislikedFoodIds) &&
+    profile.dislikedFoodIds.includes(food.id)
+  ) {
+    return false;
+  }
 
   const tags = food.tags || [];
   const dietBase = profile.dietBase || 'omnivore';

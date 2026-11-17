@@ -216,6 +216,15 @@ export function findFoodByQuery(rawQuery) {
     lait: 'lait_demi_ecreme',
     whey: 'whey_isolate',
     brocoli: 'brocoli',
+    citron: 'citron_jaune',
+    'jus de citron': 'jus_citron',
+    ail: 'ail_frais',
+    oignon: 'oignon_jaune',
+    semoule: 'semoule_couscous_crue',
+    wrap: 'tortilla_wrap_ble',
+    tortilla: 'tortilla_wrap_ble',
+    parmesan: 'parmesan_reggiano',
+    comte: 'comte_emmental',
   };
 
   if (directAliases[q]) {
@@ -226,7 +235,7 @@ export function findFoodByQuery(rawQuery) {
   let bestScore = 0;
   const queryTokens = q.split(' ').filter((t) => t.length >= 2);
 
-  for (const food of FOOD_DATABASE) {
+  for (const food of getAllFoods()) {
     const normName = normalizeText(food.name);
     let score = 0;
 
@@ -262,11 +271,11 @@ export function findFoodByQuery(rawQuery) {
 }
 
 /**
- * Adapte automatiquement une recette aux restrictions alimentaires du profil
- * en substituant tout ingrédient incompatible par la meilleure alternative compatible !
+ * Adapte automatiquement une recette aux restrictions ET aux exclusions gustatives ("Je ne mange pas") du profil
+ * en substituant tout ingrédient non désiré par la meilleure alternative compatible !
  */
 export function adaptRecipeIngredientsToProfile(ingredients, profile) {
-  return ingredients.map((ing) => {
+  return (ingredients || []).map((ing) => {
     const food = getFoodById(ing.foodId);
     if (!food) return ing;
     if (isFoodCompatibleWithProfile(food, profile)) {
@@ -279,8 +288,24 @@ export function adaptRecipeIngredientsToProfile(ingredients, profile) {
         foodId: best.food.id,
         grams: best.grams,
         swappedFrom: food.name,
+        swappedTo: best.food.name,
       };
     }
     return ing;
   });
+}
+
+/**
+ * Retourne une version dynamique auto-mise-à-jour d'une recette selon les goûts & exclusions du profil
+ */
+export function getLiveAdaptedRecipe(recipe, profile) {
+  if (!recipe) return null;
+  const adaptedIngs = adaptRecipeIngredientsToProfile(recipe.ingredients || [], profile);
+  const swaps = adaptedIngs.filter((it) => Boolean(it.swappedFrom));
+  return {
+    ...recipe,
+    ingredients: adaptedIngs,
+    swapsMade: swaps,
+    hasAutoSwaps: swaps.length > 0,
+  };
 }

@@ -146,6 +146,9 @@ export const DEFAULT_PROFILE = (() => {
     ...baseBio,
     dietBase: 'omnivore',
     restrictions: [],
+    dislikedFoodIds: [],
+    favoriteRecipeIds: [],
+    preferredEquipment: [],
     manualTargets: false,
     targets: {
       kcal: computed.kcal,
@@ -176,6 +179,13 @@ export function loadProfile() {
         ...(parsed.targets || {}),
       },
       restrictions: Array.isArray(parsed.restrictions) ? parsed.restrictions : [],
+      dislikedFoodIds: Array.isArray(parsed.dislikedFoodIds) ? parsed.dislikedFoodIds : [],
+      favoriteRecipeIds: Array.isArray(parsed.favoriteRecipeIds)
+        ? parsed.favoriteRecipeIds
+        : [],
+      preferredEquipment: Array.isArray(parsed.preferredEquipment)
+        ? parsed.preferredEquipment
+        : [],
     };
   } catch {
     return { ...DEFAULT_PROFILE };

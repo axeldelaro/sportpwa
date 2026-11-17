@@ -15,6 +15,7 @@ import {
   computeSubstitutions,
   findFoodByQuery,
   roundToNearest5g,
+  getLiveAdaptedRecipe,
 } from './substitutionEngine.js';
 import {
   SCIENTIFIC_STUDIES,
@@ -437,8 +438,8 @@ export function generateCoachResponse(userMessage, context = {}) {
   // 1. GÉNÉRATEUR DE JOURNÉE ALIMENTAIRE COMPLÈTE CALIBRÉE SUR LES MACROS
   // =========================================================================
   if (intent === 'full_day_menu') {
-    const compatible = RECIPES_DATA.filter((r) =>
-      isRecipeCompatibleWithProfile(r, profile)
+    const compatible = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter(
+      (r) => isRecipeCompatibleWithProfile(r, profile)
     );
     const pickSlot = (slot, shareKcal) => {
       const pool = compatible.filter((r) => r.mealTypes.includes(slot));

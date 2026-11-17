@@ -344,6 +344,37 @@ export default function App() {
     setWaterMl(clean);
   };
 
+  const handleToggleDislikedFood = useCallback((foodId) => {
+    if (!foodId) return;
+    setProfile((prev) => {
+      const list = Array.isArray(prev.dislikedFoodIds) ? prev.dislikedFoodIds : [];
+      const nextList = list.includes(foodId)
+        ? list.filter((id) => id !== foodId)
+        : [...list, foodId];
+      return saveProfile({ ...prev, dislikedFoodIds: nextList });
+    });
+  }, []);
+
+  const handleToggleFavoriteRecipe = useCallback((recipeId) => {
+    if (!recipeId) return;
+    setProfile((prev) => {
+      const list = Array.isArray(prev.favoriteRecipeIds) ? prev.favoriteRecipeIds : [];
+      const nextList = list.includes(recipeId)
+        ? list.filter((id) => id !== recipeId)
+        : [...list, recipeId];
+      return saveProfile({ ...prev, favoriteRecipeIds: nextList });
+    });
+  }, []);
+
+  const handleUpdatePreferredEquipment = useCallback((nextEqList) => {
+    setProfile((prev) =>
+      saveProfile({
+        ...prev,
+        preferredEquipment: Array.isArray(nextEqList) ? nextEqList : [],
+      })
+    );
+  }, []);
+
   const handleStartWorkout = (workout, intensityMode = 'normal') => {
     const preparedExercises = buildActiveWorkoutExercises(workout, intensityMode);
     const session = {
@@ -637,6 +668,8 @@ export default function App() {
         {activeTab === 'workouts' && (
           <WorkoutsTab
             lang={lang}
+            profile={profile}
+            onUpdatePreferredEquipment={handleUpdatePreferredEquipment}
             customWorkouts={customWorkouts}
             workoutHistory={workoutHistory}
             activeWorkoutSession={activeWorkoutSession}
@@ -656,6 +689,8 @@ export default function App() {
             dayLog={selectedDayLog}
             onSaveDayLog={handleSaveDayLog}
             profile={profile}
+            onToggleDislikedFood={handleToggleDislikedFood}
+            onToggleFavoriteRecipe={handleToggleFavoriteRecipe}
             customRecipes={customRecipes}
             onSaveCustomRecipe={handleSaveCustomRecipe}
             onDeleteCustomRecipe={handleDeleteCustomRecipe}
@@ -738,6 +773,7 @@ export default function App() {
         initialGrams={subModalState.initialGrams}
         contextLabel={subModalState.contextLabel}
         profile={profile}
+        onToggleDislikedFood={handleToggleDislikedFood}
         onClose={() => setSubModalState((prev) => ({ ...prev, isOpen: false }))}
         onConfirmSwap={(swapResult) => {
           if (typeof subModalState.onConfirmSwap === 'function') {

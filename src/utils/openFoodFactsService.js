@@ -180,34 +180,30 @@ function normalizeOffProduct(p) {
   };
 }
 
+const offQueryCache = new Map();
+
 /**
- * Recherche universelle ultra-rapide via le moteur ElasticSearch Search-a-licious d'Open Food Facts (3M+ références)
+ * Recherche universelle compatible CORS navigateur (`Access-Control-Allow-Origin: *`) sur Open Food Facts (3M+ références)
  */
 export async function searchOpenFoodFacts(query, lang = 'fr', signal = undefined) {
-  const q = String(query || '').trim();
+  const q = String(query || '').trim().toLowerCase();
   if (q.length < 2) return [];
+
+  const cacheKey = `${lang}:${q}`;
+  if (offQueryCache.has(cacheKey)) {
+    return offQueryCache.get(cacheKey);
+  }
 
   const fields =
     'code,product_name,product_name_fr,brands,nutriments,nutriscore_grade,allergens_tags,categories';
-  const langFilter = lang === 'fr' ? '&langs=fr' : lang === 'es' ? '&langs=es' : '';
-  const fastUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
     q
-  )}&page_size=14&fields=${fields}${langFilter}`;
+  )}&search_simple=1&action=process&json=1&page_size=14&fields=${fields}`;
 
-  let rawProducts = [];
-  const res = await fetch(fastUrl, { signal });
-  if (res.ok) {
-    const data = await res.json();
-    rawProducts = data.hits || data.products || [];
-  } else {
-    const fallbackUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
-      q
-    )}&search_simple=1&action=process&json=1&page_size=12&fields=${fields}`;
-    const fbRes = await fetch(fallbackUrl, { signal });
-    if (!fbRes.ok) throw new Error(`HTTP ${fbRes.status}`);
-    const fbData = await fbRes.json();
-    rawProducts = fbData.products || [];
-  }
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const rawProducts = data.products || [];
 
   const seenNames = new Set();
   const normalized = [];
@@ -220,6 +216,12 @@ export async function searchOpenFoodFacts(query, lang = 'fr', signal = undefined
     seenNames.add(key);
     normalized.push(item);
   }
+
+  if (offQueryCache.size > 60) {
+    const firstKey = offQueryCache.keys().next().value;
+    offQueryCache.delete(firstKey);
+  }
+  offQueryCache.set(cacheKey, normalized);
 
   return normalized;
 }

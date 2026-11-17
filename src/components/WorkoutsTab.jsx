@@ -5,16 +5,31 @@ import {
   Plus,
   Trash2,
   Check,
+  SlidersHorizontal,
+  Search,
+  X,
+  BookmarkPlus,
 } from 'lucide-react';
 import {
   WORKOUT_PROGRAMS,
   INTENSITY_MODES,
   EXERCISE_CATALOG,
+  EQUIPMENT_OPTIONS,
+  DISCIPLINE_CATEGORIES,
+  MUSCLE_FILTER_GROUPS,
+  matchesSelectedEquipment,
 } from '../data/workoutsData';
+import { normalizeText } from '../utils/substitutionEngine';
 import { tr } from '../i18n/translations';
+
+const EQUIPMENT_LABEL_MAP = Object.fromEntries(
+  EQUIPMENT_OPTIONS.map((eq) => [eq.id, eq.label])
+);
 
 export default function WorkoutsTab({
   lang = 'fr',
+  profile,
+  onUpdatePreferredEquipment,
   customWorkouts = [],
   workoutHistory = [],
   activeWorkoutSession,
@@ -24,15 +39,25 @@ export default function WorkoutsTab({
   onDeleteCustomWorkout,
   onDeleteHistoryEntry,
 }) {
-  const [subView, setSubView] = useState('programs');
+  const [subView, setSubView] = useState('programs'); // 'programs' | 'exercises' | 'custom' | 'history'
   const [intensityMode, setIntensityMode] = useState('normal');
+  const [disciplineFilter, setDisciplineFilter] = useState('all');
+  const [muscleFilter, setMuscleFilter] = useState('all');
+  const [exerciseSearch, setExerciseSearch] = useState('');
+  const [equipmentDrawerOpen, setEquipmentDrawerOpen] = useState(false);
+
   const [expandedProgId, setExpandedProgId] = useState(null);
   const [expandedWorkoutId, setExpandedWorkoutId] = useState(null);
 
+  // Sélection rapide d'exercices au pouce depuis l'onglet "Exercices"
+  const [quickPickIds, setQuickPickIds] = useState([]);
+
+  // Éditeur séance sur-mesure
   const [showBuilder, setShowBuilder] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [customDuration, setCustomDuration] = useState(35);
   const [customExercises, setCustomExercises] = useState([]);
+  const [builderSearch, setBuilderSearch] = useState('');
   const [newExForm, setNewExForm] = useState({
     name: '',
     type: 'reps',
@@ -48,11 +73,120 @@ export default function WorkoutsTab({
   const [rmWeight, setRmWeight] = useState(60);
   const [rmReps, setRmReps] = useState(8);
 
+  const selectedEquipment = profile?.preferredEquipment || [];
+
+  const toggleEquipmentId = (eqId) => {
+    if (!onUpdatePreferredEquipment) return;
+    const exists = selectedEquipment.includes(eqId);
+    const next = exists
+      ? selectedEquipment.filter((id) => id !== eqId)
+      : [...selectedEquipment, eqId];
+    onUpdatePreferredEquipment(next);
+  };
+
+  const applyEquipmentPreset = (ids) => {
+    if (onUpdatePreferredEquipment) onUpdatePreferredEquipment(ids);
+  };
+
   const estimated1RM = useMemo(() => {
     const w = Number(rmWeight) || 0;
     const r = Math.max(1, Math.min(30, Number(rmReps) || 1));
     return r === 1 ? Math.round(w) : Math.round(w * (1 + r / 30));
   }, [rmWeight, rmReps]);
+
+  // Filtrage intelligent des Programmes selon Discipline + Matériel sélectionné
+  const filteredPrograms = useMemo(() => {
+    return WORKOUT_PROGRAMS.filter((prog) => {
+      if (disciplineFilter !== 'all' && prog.discipline !== disciplineFilter) {
+        return false;
+      }
+      if (!matchesSelectedEquipment(prog.equipmentTags, selectedEquipment)) {
+        return false;
+      }
+      return true;
+    });
+  }, [disciplineFilter, selectedEquipment]);
+
+  // Filtrage intelligent du Catalogue d'Exercices (Discipline + Matériel + Muscle + Recherche)
+  const filteredExercises = useMemo(() => {
+    const q = normalizeText(exerciseSearch);
+    return EXERCISE_CATALOG.filter((ex) => {
+      if (disciplineFilter !== 'all' && ex.discipline !== disciplineFilter) {
+        return false;
+      }
+      if (muscleFilter !== 'all' && ex.muscleGroup !== muscleFilter) {
+        return false;
+      }
+      if (!matchesSelectedEquipment(ex.equipmentTags, selectedEquipment)) {
+        return false;
+      }
+      if (q) {
+        const hay = normalizeText(`${ex.name} ${ex.muscle} ${ex.cue || ''}`);
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [disciplineFilter, muscleFilter, selectedEquipment, exerciseSearch]);
+
+  const builderCatalogMatches = useMemo(() => {
+    const q = normalizeText(builderSearch);
+    return EXERCISE_CATALOG.filter((ex) => {
+      if (!matchesSelectedEquipment(ex.equipmentTags, selectedEquipment)) return false;
+      if (!q) return true;
+      return normalizeText(`${ex.name} ${ex.muscle}`).includes(q);
+    }).slice(0, 35);
+  }, [builderSearch, selectedEquipment]);
+
+  const toggleQuickPickExercise = (exId) => {
+    setQuickPickIds((prev) =>
+      prev.includes(exId) ? prev.filter((id) => id !== exId) : [...prev, exId]
+    );
+  };
+
+  const handleLaunchQuickPickWorkout = () => {
+    const picked = quickPickIds
+      .map((id) => EXERCISE_CATALOG.find((ex) => ex.id === id))
+      .filter(Boolean);
+    if (picked.length === 0) return;
+
+    onStartWorkout(
+      {
+        id: `quick_${Date.now()}`,
+        title: `Séance Express (${picked.length} ex.)`,
+        durationMin: picked.length * 7,
+        targetMuscles: Array.from(new Set(picked.map((p) => p.muscle))).slice(0, 3),
+        exercises: picked,
+      },
+      intensityMode
+    );
+    setQuickPickIds([]);
+  };
+
+  const handleSaveQuickPickToCustom = async () => {
+    const picked = quickPickIds
+      .map((id) => EXERCISE_CATALOG.find((ex) => ex.id === id))
+      .filter(Boolean);
+    if (picked.length === 0) return;
+
+    const title = window.prompt(
+      'Nom de cette séance personnalisée :',
+      `Ma séance (${picked.length} ex.)`
+    );
+    if (!title || !title.trim()) return;
+
+    await onCreateCustomWorkout({
+      title: title.trim(),
+      durationMin: Math.max(15, picked.length * 7),
+      targetMuscles: Array.from(new Set(picked.map((p) => p.muscle))).slice(0, 4),
+      equipment: 'Sur-mesure',
+      exercises: picked.map((ex, idx) => ({
+        ...ex,
+        id: `cex_${Date.now()}_${idx}`,
+      })),
+    });
+    setQuickPickIds([]);
+    setSubView('custom');
+  };
 
   const addExerciseFromCatalog = (catalogEx) => {
     setCustomExercises((prev) => [
@@ -98,7 +232,7 @@ export default function WorkoutsTab({
   };
 
   return (
-    <div className="space-y-4 pb-8 animate-fade-in">
+    <div className="space-y-3.5 pb-12 animate-fade-in">
       {activeWorkoutSession && (
         <div className="card-surface p-4 flex items-center justify-between gap-3 border-emerald-400/30">
           <div className="min-w-0">
@@ -120,11 +254,15 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* Contrôle segmenté adaptatif */}
-      <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+      {/* Navigation segmentée épurée à 4 vues */}
+      <div className="grid grid-cols-4 p-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
         {[
           { id: 'programs', label: tr(lang, 'tab_programs') },
-          { id: 'custom', label: `${tr(lang, 'tab_custom')} (${customWorkouts.length})` },
+          { id: 'exercises', label: 'Exercices' },
+          {
+            id: 'custom',
+            label: customWorkouts.length > 0 ? `Perso (${customWorkouts.length})` : 'Perso',
+          },
           { id: 'history', label: tr(lang, 'tab_history') },
         ].map((tab) => {
           const active = subView === tab.id;
@@ -133,7 +271,7 @@ export default function WorkoutsTab({
               key={tab.id}
               type="button"
               onClick={() => setSubView(tab.id)}
-              className={`py-2 px-2 rounded-full text-xs font-medium transition-all ${
+              className={`py-2 px-1.5 rounded-full text-[11.5px] font-medium transition-all truncate ${
                 active
                   ? 'bg-emerald-400 text-zinc-950 font-semibold shadow-sm'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -145,157 +283,400 @@ export default function WorkoutsTab({
         })}
       </div>
 
-      {/* Intensité */}
-      {subView !== 'history' && (
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs text-[var(--text-muted)]">
-            {tr(lang, 'intensity')}
-          </span>
-          <div className="inline-flex items-center gap-1 bg-[var(--bg-subtle)] p-1 rounded-full border border-[var(--border-subtle)]">
-            {INTENSITY_MODES.map((m) => {
-              const selected = intensityMode === m.id;
+      {/* Barre compacte : Disciplines (Callisthénie, Poids du corps, Élastiques...) + Bouton Matériel */}
+      {(subView === 'programs' || subView === 'exercises') && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              {DISCIPLINE_CATEGORIES.map((cat) => {
+                const active = disciplineFilter === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setDisciplineFilter(cat.id)}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
+                      active
+                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                        : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setEquipmentDrawerOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 transition-colors ${
+                selectedEquipment.length > 0
+                  ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400 font-semibold'
+                  : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-primary)]'
+              }`}
+              title="Filtrer selon ton matériel disponible"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>
+                Matériel{selectedEquipment.length > 0 ? ` (${selectedEquipment.length})` : ''}
+              </span>
+            </button>
+          </div>
+
+          {/* Sélecteur discret d'intensité / énergie du jour */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] text-[var(--text-muted)]">
+              {subView === 'programs'
+                ? `${filteredPrograms.length} programme(s)`
+                : `${filteredExercises.length} exercice(s)`}
+            </span>
+
+            <div className="inline-flex items-center gap-0.5 bg-[var(--bg-subtle)] p-0.5 rounded-full border border-[var(--border-subtle)]">
+              {INTENSITY_MODES.map((m) => {
+                const selected = intensityMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setIntensityMode(m.id)}
+                    className={`px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
+                      selected
+                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                        : 'text-[var(--text-secondary)]'
+                    }`}
+                    title={m.description}
+                  >
+                    {m.shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* VUE 1 : PROGRAMMES COMPLETS FILTRÉS PAR DISCIPLINE & MATÉRIEL       */}
+      {/* =================================================================== */}
+      {subView === 'programs' && (
+        <div className="space-y-3">
+          {filteredPrograms.length === 0 ? (
+            <div className="card-surface p-6 text-center space-y-2.5">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                Aucun programme pour cette combinaison
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Ajuste ton matériel ou passe sur l’onglet « Exercices » pour composer ta séance en 1 clic.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDisciplineFilter('all');
+                  applyEquipmentPreset([]);
+                }}
+                className="btn-secondary !py-1.5 !px-4 !text-xs"
+              >
+                Réinitialiser les filtres
+              </button>
+            </div>
+          ) : (
+            filteredPrograms.map((prog) => {
+              const isExpanded = expandedProgId === prog.id;
+
+              return (
+                <div key={prog.id} className="card-surface overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedProgId(isExpanded ? null : prog.id)}
+                    className="w-full p-5 flex items-center justify-between gap-3 text-left transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] flex-wrap">
+                        <span className="text-emerald-400 font-medium">{prog.category}</span>
+                        <span>·</span>
+                        <span>{prog.frequency}</span>
+                        <span>·</span>
+                        <span>{prog.workouts.length} séances</span>
+                      </div>
+                      <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mt-1">
+                        {prog.title}
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                        {prog.subtitle}
+                      </p>
+                    </div>
+
+                    <ChevronDown
+                      className={`w-4 h-4 text-[var(--text-muted)] shrink-0 transition-transform duration-200 ${
+                        isExpanded ? 'rotate-180 text-[var(--text-primary)]' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 space-y-2 border-t border-[var(--border-subtle)] pt-3">
+                      {prog.workouts.map((wk) => {
+                        const detailsOpen = expandedWorkoutId === wk.id;
+                        return (
+                          <div
+                            key={wk.id}
+                            className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-4 space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+                                  {wk.title}
+                                </h4>
+                                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                                  {wk.durationMin} min · {wk.exercises.length} ex. ·{' '}
+                                  <span className="text-[var(--text-secondary)]">
+                                    {wk.equipment}
+                                  </span>
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onStartWorkout(
+                                    { ...wk, programId: prog.id, programTitle: prog.title },
+                                    intensityMode
+                                  )
+                                }
+                                className="btn-primary !py-2 !px-4 !text-xs shrink-0"
+                              >
+                                <Play className="w-3 h-3 fill-current" />
+                                {tr(lang, 'start')}
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-0.5">
+                              <p className="text-[11px] text-[var(--text-muted)] truncate">
+                                {wk.targetMuscles.join(' · ')}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedWorkoutId(detailsOpen ? null : wk.id)
+                                }
+                                className="text-[11px] font-medium text-[var(--text-secondary)] underline shrink-0 ml-3"
+                              >
+                                {detailsOpen ? tr(lang, 'hide') : tr(lang, 'preview')}
+                              </button>
+                            </div>
+
+                            {detailsOpen && (
+                              <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-1.5">
+                                {wk.exercises.map((ex, idx) => (
+                                  <div
+                                    key={ex.id}
+                                    className="py-1 flex items-center justify-between gap-3 text-xs"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[var(--text-primary)] truncate">
+                                        <span className="text-[var(--text-muted)] mr-1.5">
+                                          {idx + 1}.
+                                        </span>
+                                        {ex.name}
+                                      </p>
+                                      {ex.alternative && (
+                                        <p className="text-[10.5px] text-[var(--text-muted)] truncate pl-3.5">
+                                          Alt. : {ex.alternative}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span className="shrink-0 text-[var(--text-secondary)] tabular-nums font-medium">
+                                      {ex.sets} ×{' '}
+                                      {ex.type === 'timed'
+                                        ? `${ex.durationSeconds}s`
+                                        : `${ex.targetReps}`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* VUE 2 : EXPLORATEUR D'EXERCICES PAR CATÉGORIE, MUSCLE & MATÉRIEL    */}
+      {/* =================================================================== */}
+      {subView === 'exercises' && (
+        <div className="space-y-3">
+          {/* Recherche + Filtre Groupe Musculaire */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              placeholder="Chercher un exercice (tractions, dips, élastique, squat...)"
+              className="input-dark !pl-10 !pr-8 !py-2.5 text-xs"
+            />
+            {exerciseSearch && (
+              <button
+                type="button"
+                onClick={() => setExerciseSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {MUSCLE_FILTER_GROUPS.map((m) => {
+              const active = muscleFilter === m.id;
               return (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setIntensityMode(m.id)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
-                    selected
-                      ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  onClick={() => setMuscleFilter(m.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
+                    active
+                      ? 'bg-[var(--text-primary)] text-[var(--bg-app)] font-semibold'
+                      : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
                   }`}
-                  title={m.description}
                 >
                   {m.label}
                 </button>
               );
             })}
           </div>
-        </div>
-      )}
 
-      {/* VUE 1 : LES 7 PROGRAMMES */}
-      {subView === 'programs' && (
-        <div className="space-y-3">
-          {WORKOUT_PROGRAMS.map((prog) => {
-            const isExpanded = expandedProgId === prog.id;
+          {filteredExercises.length === 0 ? (
+            <div className="card-surface p-6 text-center space-y-2">
+              <p className="text-xs text-[var(--text-muted)]">
+                Aucun exercice ne correspond à ces filtres.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDisciplineFilter('all');
+                  setMuscleFilter('all');
+                  setExerciseSearch('');
+                  applyEquipmentPreset([]);
+                }}
+                className="btn-secondary !py-1.5 !px-3.5 !text-xs"
+              >
+                Tout réafficher
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 pb-12">
+              {filteredExercises.map((ex) => {
+                const picked = quickPickIds.includes(ex.id);
+                const eqLabels = (ex.equipmentTags || [])
+                  .slice(0, 2)
+                  .map((id) => EQUIPMENT_LABEL_MAP[id] || id)
+                  .join(' · ');
 
-            return (
-              <div key={prog.id} className="card-surface overflow-hidden">
+                return (
+                  <div
+                    key={ex.id}
+                    onClick={() => toggleQuickPickExercise(ex.id)}
+                    className={`card-surface p-3.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                      picked ? 'border-emerald-400/50 bg-emerald-400/5' : ''
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--text-muted)]">
+                        <span className="text-emerald-400 font-medium">{ex.muscle}</span>
+                        {eqLabels && (
+                          <>
+                            <span>·</span>
+                            <span className="truncate">{eqLabels}</span>
+                          </>
+                        )}
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                        {ex.name}
+                      </h4>
+                      {ex.cue && (
+                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                          {ex.cue}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-xs text-[var(--text-secondary)] tabular-nums font-medium">
+                        {ex.sets} ×{' '}
+                        {ex.type === 'timed' ? `${ex.durationSeconds}s` : ex.targetReps}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleQuickPickExercise(ex.id);
+                        }}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                          picked
+                            ? 'bg-emerald-400 text-zinc-950'
+                            : 'bg-[var(--bg-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                        }`}
+                        aria-label="Sélectionner l'exercice"
+                      >
+                        {picked ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Barre flottante ergonomique dès qu'on coche des exercices */}
+          {quickPickIds.length > 0 && (
+            <div className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-30 card-elevated p-2.5 pl-4 flex items-center justify-between gap-2 border-emerald-400/40 animate-slide-up">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-6 h-6 rounded-full bg-emerald-400 text-zinc-950 text-xs font-bold flex items-center justify-center shrink-0">
+                  {quickPickIds.length}
+                </span>
+                <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                  exercice(s) prêt(s)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setExpandedProgId(isExpanded ? null : prog.id)}
-                  className="w-full p-5 flex items-center justify-between gap-3 text-left transition-colors"
+                  onClick={handleSaveQuickPickToCustom}
+                  className="btn-secondary !py-2 !px-3 !text-xs"
+                  title="Enregistrer dans mes séances perso"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-                      <span className="text-emerald-400 font-medium">
-                        {prog.category}
-                      </span>
-                      <span>·</span>
-                      <span>{prog.frequency}</span>
-                      <span>·</span>
-                      <span>{prog.workouts.length} séances</span>
-                    </div>
-                    <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mt-1">
-                      {prog.title}
-                    </h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {prog.subtitle}
-                    </p>
-                  </div>
-
-                  <ChevronDown
-                    className={`w-4 h-4 text-[var(--text-muted)] shrink-0 transition-transform duration-200 ${
-                      isExpanded ? 'rotate-180 text-[var(--text-primary)]' : ''
-                    }`}
-                  />
+                  <BookmarkPlus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden xs:inline">Sauver</span>
                 </button>
 
-                {isExpanded && (
-                  <div className="px-4 pb-4 space-y-2 border-t border-[var(--border-subtle)] pt-3">
-                    {prog.workouts.map((wk) => {
-                      const detailsOpen = expandedWorkoutId === wk.id;
-                      return (
-                        <div
-                          key={wk.id}
-                          className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-4 space-y-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <h4 className="text-sm font-semibold text-[var(--text-primary)]">
-                                {wk.title}
-                              </h4>
-                              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                                {wk.durationMin} min · {wk.exercises.length} exercices
-                              </p>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onStartWorkout(
-                                  { ...wk, programId: prog.id, programTitle: prog.title },
-                                  intensityMode
-                                )
-                              }
-                              className="btn-primary !py-2 !px-4 !text-xs shrink-0"
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              {tr(lang, 'start')}
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-0.5">
-                            <p className="text-[11px] text-[var(--text-muted)] truncate">
-                              {wk.targetMuscles.join(' · ')}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedWorkoutId(detailsOpen ? null : wk.id)
-                              }
-                              className="text-[11px] font-medium text-[var(--text-secondary)] underline shrink-0 ml-3"
-                            >
-                              {detailsOpen ? tr(lang, 'hide') : tr(lang, 'preview')}
-                            </button>
-                          </div>
-
-                          {detailsOpen && (
-                            <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-1.5">
-                              {wk.exercises.map((ex, idx) => (
-                                <div
-                                  key={ex.id}
-                                  className="py-1.5 flex items-center justify-between gap-3 text-xs"
-                                >
-                                  <span className="text-[var(--text-primary)] truncate">
-                                    <span className="text-[var(--text-muted)] mr-1.5">
-                                      {idx + 1}.
-                                    </span>
-                                    {ex.name}
-                                  </span>
-                                  <span className="shrink-0 text-[var(--text-secondary)] tabular-nums font-medium">
-                                    {ex.sets} ×{' '}
-                                    {ex.type === 'timed'
-                                      ? `${ex.durationSeconds}s`
-                                      : `${ex.targetReps}`}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={handleLaunchQuickPickWorkout}
+                  className="btn-accent !py-2 !px-3.5 !text-xs"
+                >
+                  <Play className="w-3 h-3 fill-current" />
+                  Démarrer
+                </button>
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* VUE 2 : SÉANCES SUR-MESURE */}
+      {/* =================================================================== */}
+      {/* VUE 3 : SÉANCES SUR-MESURE                                          */}
+      {/* =================================================================== */}
       {subView === 'custom' && (
         <div className="space-y-4">
           <button
@@ -308,22 +689,17 @@ export default function WorkoutsTab({
           </button>
 
           {showBuilder && (
-            <form
-              onSubmit={handleSaveNewWorkout}
-              className="card-surface p-5 space-y-4"
-            >
+            <form onSubmit={handleSaveNewWorkout} className="card-surface p-5 space-y-4">
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs text-[var(--text-muted)] mb-1">
-                    Nom
-                  </label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">Nom</label>
                   <input
                     type="text"
                     required
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="Ex: Full Body Maison"
-                    className="input-dark"
+                    placeholder="Ex: Callisthénie & Élastiques"
+                    className="input-dark !py-2 text-xs"
                   />
                 </div>
                 <div>
@@ -336,33 +712,52 @@ export default function WorkoutsTab({
                     max="150"
                     value={customDuration}
                     onChange={(e) => setCustomDuration(e.target.value)}
-                    className="input-dark tabular-nums"
+                    className="input-dark !py-2 text-xs tabular-nums"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">
-                  Choisir dans le catalogue ({EXERCISE_CATALOG.length} exercices)
-                </label>
-                <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    const ex = EXERCISE_CATALOG.find((item) => item.id === e.target.value);
-                    if (ex) addExerciseFromCatalog(ex);
-                    e.target.value = '';
-                  }}
-                  className="input-dark"
-                >
-                  <option value="" disabled>
-                    Sélectionner un exercice...
-                  </option>
-                  {EXERCISE_CATALOG.map((ex) => (
-                    <option key={ex.id} value={ex.id} className="bg-zinc-900 text-white">
-                      {ex.name} — {ex.muscle}
-                    </option>
+              {/* Recherche rapide dans le catalogue filtré par ton matériel */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-[var(--text-secondary)] font-medium">
+                    Ajouter depuis le catalogue ({EXERCISE_CATALOG.length} ex.)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEquipmentDrawerOpen(true)}
+                    className="text-[11px] text-emerald-400 underline"
+                  >
+                    Filtrer matériel
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={builderSearch}
+                    onChange={(e) => setBuilderSearch(e.target.value)}
+                    placeholder="Chercher (chaise romaine, élastique, dips, curl...)"
+                    className="input-dark !pl-9 !py-2 text-xs"
+                  />
+                </div>
+
+                <div className="max-h-40 overflow-y-auto rounded-2xl bg-[var(--bg-subtle)]/70 p-1.5 space-y-1">
+                  {builderCatalogMatches.map((ex) => (
+                    <button
+                      key={ex.id}
+                      type="button"
+                      onClick={() => addExerciseFromCatalog(ex)}
+                      className="w-full text-left px-3 py-1.5 rounded-xl text-xs hover:bg-[var(--bg-app)] flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate text-[var(--text-primary)]">{ex.name}</span>
+                      <span className="text-[11px] text-emerald-400 font-medium shrink-0">
+                        + Ajouter
+                      </span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2.5">
@@ -447,7 +842,7 @@ export default function WorkoutsTab({
                   className="btn-secondary w-full !py-1.5 !text-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Ajouter l’exercice
+                  Ajouter l’exercice libre
                 </button>
               </div>
 
@@ -465,7 +860,9 @@ export default function WorkoutsTab({
                       <button
                         type="button"
                         onClick={() =>
-                          setCustomExercises((prev) => prev.filter((item) => item.id !== ex.id))
+                          setCustomExercises((prev) =>
+                            prev.filter((item) => item.id !== ex.id)
+                          )
                         }
                         className="text-[var(--text-muted)] hover:text-rose-400 p-1"
                       >
@@ -493,7 +890,7 @@ export default function WorkoutsTab({
                 Aucune séance sur-mesure
               </p>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                Crée tes propres routines à partir de {EXERCISE_CATALOG.length} exercices.
+                Coche des mouvements dans l’onglet « Exercices » ou utilise l’éditeur ci-dessus.
               </p>
             </div>
           ) : (
@@ -535,7 +932,9 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* VUE 3 : HISTORIQUE & 1RM */}
+      {/* =================================================================== */}
+      {/* VUE 4 : HISTORIQUE & CALCULATEUR 1RM                                */}
+      {/* =================================================================== */}
       {subView === 'history' && (
         <div className="space-y-4">
           <div className="card-surface p-5 space-y-3.5">
@@ -620,6 +1019,118 @@ export default function WorkoutsTab({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* TIROIR MATÉRIEL DISPONIBLE (14 ÉQUIPEMENTS MÉMORISÉS SUR LE PROFIL) */}
+      {/* =================================================================== */}
+      {equipmentDrawerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-md max-h-[86vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  Mon matériel disponible
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Mémorisé sur ton profil · Filtre programmes & exercices
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEquipmentDrawerOpen(false)}
+                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-4 space-y-4">
+              {/* Préréglages 1 clic */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => applyEquipmentPreset([])}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border ${
+                    selectedEquipment.length === 0
+                      ? 'bg-emerald-400 text-zinc-950 border-emerald-400 font-semibold'
+                      : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+                  }`}
+                >
+                  Tout afficher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyEquipmentPreset(['none'])}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                >
+                  100% Sans matériel
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    applyEquipmentPreset([
+                      'none',
+                      'bands',
+                      'roman_chair',
+                      'pullup_bar',
+                      'dip_bars',
+                      'trx_rings',
+                    ])
+                  }
+                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                >
+                  Parc / Street / Élastiques
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    applyEquipmentPreset([
+                      'none',
+                      'dumbbells',
+                      'kettlebell',
+                      'bands',
+                      'bench',
+                    ])
+                  }
+                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                >
+                  Home Gym
+                </button>
+              </div>
+
+              {/* Grille épurée des 14 équipements */}
+              <div className="grid grid-cols-2 gap-2">
+                {EQUIPMENT_OPTIONS.map((eq) => {
+                  const checked = selectedEquipment.includes(eq.id);
+                  return (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      onClick={() => toggleEquipmentId(eq.id)}
+                      className={`p-3 rounded-2xl border text-left text-xs font-medium flex items-center justify-between gap-2 transition-all ${
+                        checked
+                          ? 'bg-emerald-400/15 border-emerald-400/50 text-emerald-400 font-semibold'
+                          : 'bg-[var(--bg-subtle)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      <span className="leading-snug">{eq.label}</span>
+                      {checked && <Check className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEquipmentDrawerOpen(false)}
+                className="btn-accent w-full !py-2.5 !text-xs"
+              >
+                Voir les séances adaptées
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

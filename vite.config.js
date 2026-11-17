@@ -12,6 +12,19 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     target: 'es2020',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+          if (id.includes('/src/data/') || id.includes('\\src\\data\\')) {
+            return 'catalog';
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,
