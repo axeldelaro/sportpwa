@@ -585,6 +585,7 @@ export default function App() {
         profile={profile}
         onClose={() => setProfileModalOpen(false)}
         onSaveProfile={handleSaveProfile}
+        onSwitchToCloudRestore={() => setCloudVaultOpen(true)}
       />
 
       <CloudVaultModal

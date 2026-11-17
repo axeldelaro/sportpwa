@@ -1,14 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, CloudDownload } from 'lucide-react';
 import {
   ACTIVITY_LEVELS,
   FITNESS_GOALS,
   DIETARY_FILTERS,
   calculateNutritionalTargets,
 } from '../db/database';
-import { FOOD_DATABASE, isFoodCompatibleWithProfile } from '../data/foodDatabase';
+import { getAllFoods, isFoodCompatibleWithProfile } from '../data/foodDatabase';
 
-export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }) {
+export default function ProfileModal({
+  isOpen,
+  profile,
+  onClose,
+  onSaveProfile,
+  onSwitchToCloudRestore,
+}) {
   const [form, setForm] = useState(() => ({
     ...profile,
     restrictions: Array.isArray(profile?.restrictions) ? [...profile.restrictions] : [],
@@ -39,7 +45,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
       };
 
   const compatibleFoodsCount = useMemo(
-    () => FOOD_DATABASE.filter((f) => isFoodCompatibleWithProfile(f, form)).length,
+    () => getAllFoods().filter((f) => isFoodCompatibleWithProfile(f, form)).length,
     [form]
   );
 
@@ -84,33 +90,48 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="w-full max-w-lg max-h-[90vh] bg-zinc-950 border border-white/[0.09] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
-        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+      <div className="w-full max-w-lg max-h-[90vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
               {isFirstOnboarding ? 'Bienvenue sur PulseFit' : 'Profil & Objectifs'}
             </h2>
-            <p className="text-xs text-zinc-500">
-              Calcul Mifflin-St Jeor · Stockage local uniquement
+            <p className="text-xs text-[var(--text-muted)]">
+              Formule Mifflin-St Jeor (ISSN) · Cloud Chiffré AES-256 & Hors-Ligne
             </p>
           </div>
           {!isFirstOnboarding && (
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-400 hover:text-zinc-200"
+              className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        <form onSubmit={handleSave} className="overflow-y-auto p-5 space-y-6">
+        <form onSubmit={handleSave} className="overflow-y-auto p-5 space-y-5">
+          {/* Raccourci immédiat Connexion / Changement d'appareil */}
+          {onSwitchToCloudRestore && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onSwitchToCloudRestore();
+              }}
+              className="w-full py-2.5 px-4 rounded-2xl bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/30 text-xs font-semibold text-emerald-400 flex items-center justify-center gap-2 transition-colors"
+            >
+              <CloudDownload className="w-4 h-4" />
+              Déjà un compte ? Se connecter & restaurer depuis le Cloud GitHub
+            </button>
+          )}
+
           {/* Biométrie */}
           <section className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Prénom</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Prénom</label>
                 <input
                   type="text"
                   value={form.name || ''}
@@ -120,8 +141,8 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                 />
               </div>
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Sexe</label>
-                <div className="grid grid-cols-2 p-1 rounded-2xl bg-zinc-900 border border-white/[0.06]">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Sexe</label>
+                <div className="grid grid-cols-2 p-1 rounded-2xl bg-[var(--bg-subtle)]">
                   {[
                     { id: 'male', label: 'Homme' },
                     { id: 'female', label: 'Femme' },
@@ -132,8 +153,8 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                       onClick={() => setForm({ ...form, sex: s.id })}
                       className={`py-1.5 rounded-xl text-xs font-medium transition-all ${
                         form.sex === s.id
-                          ? 'bg-zinc-100 text-zinc-950 font-semibold'
-                          : 'text-zinc-400'
+                          ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                          : 'text-[var(--text-secondary)]'
                       }`}
                     >
                       {s.label}
@@ -145,7 +166,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
 
             <div className="grid grid-cols-3 gap-2.5">
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Âge</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Âge</label>
                 <input
                   type="number"
                   min="14"
@@ -156,7 +177,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                 />
               </div>
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Taille (cm)</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Taille (cm)</label>
                 <input
                   type="number"
                   min="120"
@@ -167,7 +188,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                 />
               </div>
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Poids (kg)</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Poids (kg)</label>
                 <input
                   type="number"
                   step="0.1"
@@ -181,14 +202,14 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
             </div>
 
             <div>
-              <label className="block text-xs text-zinc-500 mb-1">Activité</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Activité</label>
               <select
                 value={form.activityLevel}
                 onChange={(e) => setForm({ ...form, activityLevel: e.target.value })}
                 className="input-dark"
               >
                 {ACTIVITY_LEVELS.map((act) => (
-                  <option key={act.id} value={act.id} className="bg-zinc-900">
+                  <option key={act.id} value={act.id} className="bg-zinc-900 text-white">
                     {act.label}
                   </option>
                 ))}
@@ -198,7 +219,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
 
           {/* Objectif */}
           <section className="space-y-2">
-            <span className="text-xs text-zinc-500">Objectif</span>
+            <span className="text-xs text-[var(--text-muted)]">Objectif</span>
             <div className="grid grid-cols-3 gap-2">
               {FITNESS_GOALS.map((g) => {
                 const selected = form.goal === g.id;
@@ -209,8 +230,8 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                     onClick={() => setForm({ ...form, goal: g.id })}
                     className={`p-3 rounded-2xl border text-left transition-all ${
                       selected
-                        ? 'bg-zinc-900 border-emerald-400/60 text-zinc-50'
-                        : 'bg-zinc-900/40 border-white/[0.06] text-zinc-400 hover:text-zinc-200'
+                        ? 'bg-emerald-400/15 border-emerald-400/50 text-[var(--text-primary)]'
+                        : 'bg-[var(--bg-subtle)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]'
                     }`}
                   >
                     <span className="text-xs font-semibold block">{g.label}</span>
@@ -221,9 +242,9 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
           </section>
 
           {/* Cibles */}
-          <section className="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-4 space-y-3">
+          <section className="rounded-2xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-300">
+              <span className="text-xs font-medium text-[var(--text-primary)]">
                 Cibles quotidiennes (Maintien : {autoComputed.tdee} kcal)
               </span>
               <button
@@ -258,9 +279,9 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                   { val: `${effectiveTargets.fat}g`, lbl: 'Lip.' },
                   { val: `${(effectiveTargets.waterMl / 1000).toFixed(1)}L`, lbl: 'Eau' },
                 ].map((c) => (
-                  <div key={c.lbl} className="bg-zinc-950/70 rounded-xl py-2 px-1">
-                    <div className="text-xs font-bold text-zinc-100">{c.val}</div>
-                    <div className="text-[10px] text-zinc-500">{c.lbl}</div>
+                  <div key={c.lbl} className="bg-[var(--bg-app)]/70 rounded-xl py-2 px-1">
+                    <div className="text-xs font-bold text-[var(--text-primary)]">{c.val}</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{c.lbl}</div>
                   </div>
                 ))}
               </div>
@@ -274,7 +295,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                   { key: 'waterMl', label: 'Eau (ml)' },
                 ].map((item) => (
                   <div key={item.key}>
-                    <label className="block text-[10px] text-zinc-500 mb-1">
+                    <label className="block text-[10px] text-[var(--text-muted)] mb-1">
                       {item.label}
                     </label>
                     <input
@@ -297,13 +318,13 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
           {/* Filtres & Allergies */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Régime & Exclusions</span>
-              <span className="text-[11px] text-zinc-500 tabular-nums">
-                {compatibleFoodsCount} aliments actifs
+              <span className="text-xs text-[var(--text-muted)]">Régime & Exclusions</span>
+              <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                {compatibleFoodsCount} réf. locales + 3M+ en ligne
               </span>
             </div>
 
-            <div className="grid grid-cols-3 p-1 rounded-full bg-zinc-900 border border-white/[0.06]">
+            <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)]">
               {dietBases.map((d) => {
                 const active = (form.dietBase || 'omnivore') === d.id;
                 return (
@@ -313,8 +334,8 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                     onClick={() => setForm({ ...form, dietBase: d.id })}
                     className={`py-1.5 rounded-full text-xs font-medium transition-all ${
                       active
-                        ? 'bg-zinc-100 text-zinc-950 font-semibold'
-                        : 'text-zinc-400'
+                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                        : 'text-[var(--text-secondary)]'
                     }`}
                   >
                     {d.label}
@@ -333,8 +354,8 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
                     onClick={() => toggleRestriction(tag.id)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                       checked
-                        ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/40'
-                        : 'bg-zinc-900/60 text-zinc-400 border-white/[0.06] hover:text-zinc-200'
+                        ? 'bg-emerald-400/15 text-emerald-400 border-emerald-400/40'
+                        : 'bg-[var(--bg-subtle)]/60 text-[var(--text-secondary)] border-[var(--border-subtle)]'
                     }`}
                   >
                     {tag.label}
@@ -346,7 +367,7 @@ export default function ProfileModal({ isOpen, profile, onClose, onSaveProfile }
 
           <button type="submit" className="btn-accent w-full py-3">
             <Check className="w-4 h-4" />
-            Enregistrer
+            Enregistrer mon profil
           </button>
         </form>
       </div>
