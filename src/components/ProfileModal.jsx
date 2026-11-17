@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { X, Check, CloudDownload } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, Check, Lock } from 'lucide-react';
 import {
   ACTIVITY_LEVELS,
   FITNESS_GOALS,
@@ -20,6 +20,16 @@ export default function ProfileModal({
     restrictions: Array.isArray(profile?.restrictions) ? [...profile.restrictions] : [],
     targets: { ...(profile?.targets || {}) },
   }));
+
+  useEffect(() => {
+    if (isOpen && profile) {
+      setForm({
+        ...profile,
+        restrictions: Array.isArray(profile.restrictions) ? [...profile.restrictions] : [],
+        targets: { ...(profile.targets || {}) },
+      });
+    }
+  }, [isOpen, profile]);
 
   const autoComputed = useMemo(
     () =>
@@ -97,7 +107,7 @@ export default function ProfileModal({
               {isFirstOnboarding ? 'Bienvenue sur PulseFit' : 'Profil & Objectifs'}
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
-              Formule Mifflin-St Jeor (ISSN) · Cloud Chiffré AES-256 & Hors-Ligne
+              Formule Mifflin-St Jeor (ISSN) · Compte chiffré AES-256
             </p>
           </div>
           {!isFirstOnboarding && (
@@ -112,7 +122,6 @@ export default function ProfileModal({
         </div>
 
         <form onSubmit={handleSave} className="overflow-y-auto p-5 space-y-5">
-          {/* Raccourci immédiat Connexion / Changement d'appareil */}
           {onSwitchToCloudRestore && (
             <button
               type="button"
@@ -122,8 +131,8 @@ export default function ProfileModal({
               }}
               className="w-full py-2.5 px-4 rounded-2xl bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/30 text-xs font-semibold text-emerald-400 flex items-center justify-center gap-2 transition-colors"
             >
-              <CloudDownload className="w-4 h-4" />
-              Déjà un compte ? Se connecter & restaurer depuis le Cloud GitHub
+              <Lock className="w-4 h-4" />
+              Déjà un compte ? Se connecter avec mon identifiant & mot de passe
             </button>
           )}
 

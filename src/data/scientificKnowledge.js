@@ -184,8 +184,8 @@ export const SCIENTIFIC_STUDIES = [
     pmid: '20543739',
     url: 'https://pubmed.ncbi.nlm.nih.gov/20543739/',
     keywords: [
-      'douleur', 'dos', 'lombaire', 'epaule', 'genou', 'blessure',
-      'gainage', 'posture', 'pain', 'injury', 'dolor', 'espalda', 'rodilla',
+      'douleur', 'lombaire', 'epaule', 'genou', 'blessure',
+      'gainage', 'posture', 'injury', 'dolor', 'espalda', 'rodilla',
     ],
     summary: {
       fr: 'L’endurance isométrique anti-mouvement du tronc (Curl-up modifié, Side-bridge, Bird-dog) protège les disques intervertébraux et transfère mieux la force aux membres que les flexions répétées.',

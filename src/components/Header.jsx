@@ -5,15 +5,16 @@ import {
   MoreHorizontal,
   Check,
   Smartphone,
-  Cloud,
+  ShieldCheck,
+  Lock,
   Globe,
   Palette,
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, tr } from '../i18n/translations';
-import { loadVaultMetadata } from '../utils/cryptoVaultService';
 
 export default function Header({
   profile,
+  activeAccount,
   lang = 'fr',
   onChangeLang,
   onOpenProfile,
@@ -29,7 +30,7 @@ export default function Header({
   const [statusToast, setStatusToast] = useState(null);
   const fileInputRef = useRef(null);
 
-  const vaultLinked = Boolean(loadVaultMetadata()?.accountId);
+  const isLoggedIn = Boolean(activeAccount?.username);
 
   const showToast = (msg) => {
     setStatusToast(msg);
@@ -61,7 +62,6 @@ export default function Header({
   return (
     <header className="sticky top-0 z-30 bg-[var(--bg-app)]/80 backdrop-blur-2xl border-b border-[var(--border-subtle)] pt-safe">
       <div className="max-w-xl mx-auto px-5 h-14 flex items-center justify-between">
-        {/* Identité épurée */}
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span className="font-semibold tracking-tight text-[var(--text-primary)] text-[15px]">
@@ -69,22 +69,34 @@ export default function Header({
           </span>
         </div>
 
-        {/* Actions rapides : Cloud Sécurisé + Profil + Menu ••• */}
         <div className="flex items-center gap-2 relative">
+          {/* Bouton Compte & Mot de Passe */}
           <button
             type="button"
             onClick={onOpenCloudVault}
-            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${
-              vaultLinked
+            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border text-xs font-medium transition-colors ${
+              isLoggedIn
                 ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400'
                 : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title={tr(lang, 'vault_title')}
-            aria-label={tr(lang, 'vault_title')}
           >
-            <Cloud className="w-4 h-4" />
+            {isLoggedIn ? (
+              <>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline max-w-[75px] truncate">
+                  @{activeAccount.username}
+                </span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Connexion</span>
+              </>
+            )}
           </button>
 
+          {/* Pilule Profil Biométrique */}
           <button
             type="button"
             onClick={onOpenProfile}
@@ -98,6 +110,7 @@ export default function Header({
             </span>
           </button>
 
+          {/* Menu ••• */}
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
@@ -114,7 +127,6 @@ export default function Header({
                 onClick={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-11 z-50 w-64 card-elevated p-3 space-y-3 animate-fade-in">
-                {/* Sélecteur de Langue FR / EN / ES */}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] px-1">
                     <Globe className="w-3.5 h-3.5" />
@@ -138,7 +150,6 @@ export default function Header({
                   </div>
                 </div>
 
-                {/* Sélecteur des 3 Styles d'Application */}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] px-1">
                     <Palette className="w-3.5 h-3.5" />
@@ -175,7 +186,7 @@ export default function Header({
                     }}
                     className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-2xl text-xs font-medium text-emerald-400 hover:bg-[var(--bg-subtle)] transition-colors"
                   >
-                    <Cloud className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4" />
                     {tr(lang, 'vault_title')}
                   </button>
 

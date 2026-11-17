@@ -1,7 +1,20 @@
 // Persistance 100% locale hybride : localStorage + IndexedDB (Wrapper natif basé sur les Promises)
 
 const DB_NAME = 'pulsefit_local_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+
+export function safeJsonParse(rawStr, fallback = null) {
+  try {
+    return JSON.parse(rawStr, (key, value) => {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return undefined;
+      }
+      return value;
+    });
+  } catch {
+    return fallback;
+  }
+}
 
 export const LS_KEYS = {
   PROFILE: 'pulsefit_profile_v1',
@@ -9,7 +22,7 @@ export const LS_KEYS = {
   THEME: 'pulsefit_theme_v1',
   LANG: 'pulsefit_lang_v1',
   ACTIVE_WORKOUT: 'pulsefit_active_workout_v1',
-  CLOUD_VAULT_META: 'pulsefit_cloud_vault_meta_v1',
+  ACTIVE_ACCOUNT: 'pulsefit_active_account_v1',
 };
 
 export const ACTIVITY_LEVELS = [
@@ -308,6 +321,10 @@ export function openDatabase() {
 
       if (!db.objectStoreNames.contains('cachedFoods')) {
         db.createObjectStore('cachedFoods', { keyPath: 'id' });
+      }
+
+      if (!db.objectStoreNames.contains('accountsVault')) {
+        db.createObjectStore('accountsVault', { keyPath: 'username' });
       }
     };
 
@@ -632,3 +649,53 @@ export async function importFullBackupData(payload) {
 
   return true;
 }
+
+// ==========================================
+// COFFRE MULTI-COMPTES CHIFFRÉS (AES-256-GCM)
+// ==========================================
+
+export async function getEncryptedAccountRecord(username) {
+  const clean = String(username || '').trim().toLowerCase();
+  if (!clean) return null;
+  return withStore('accountsVault', 'readonly', (store) => store.get(clean));
+}
+
+export async function saveEncryptedAccountRecord(record) {
+  if (!record?.username) throw new Error('Identifiant requis');
+  await withStore('accountsVault', 'readwrite', (store) => store.put(record));
+  return record;
+}
+
+export async function listEncryptedAccountUsernames() {
+  const all = await withStore('accountsVault', 'readonly', (store) => store.getAll());
+  return (all || []).map((r) => ({
+    username: r.username,
+    updatedAt: r.updatedAt,
+  }));
+}
+
+export async function clearWorkingStoresOnLock() {
+  localStorage.removeItem(LS_KEYS.PROFILE);
+  localStorage.removeItem(LS_KEYS.HYDRATION);
+  localStorage.removeItem(LS_KEYS.ACTIVE_WORKOUT);
+  localStorage.removeItem(LS_KEYS.ACTIVE_ACCOUNT);
+
+  const db = await openDatabase();
+  const workingStores = [
+    'workoutHistory',
+    'nutritionLogs',
+    'shoppingList',
+    'customRecipes',
+    'customWorkouts',
+    'coachMessages',
+    'bodyMetrics',
+  ];
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(workingStores, 'readwrite');
+    workingStores.forEach((name) => tx.objectStore(name).clear());
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+

@@ -1,10 +1,18 @@
-// Cryptographie Zero-Knowledge de grade militaire (Web Crypto API native)
-// PBKDF2-HMAC-SHA256 (600 000 itérations OWASP) + AES-256-GCM authentifié
-// Synchronisation Cloud 100% GitHub (Secret Gist Vault) sans aucun serveur tiers
+// Système de Compte Utilisateur & Mot de Passe 100% autonome (Zéro serveur tiers, Zéro connexion GitHub)
+// Cryptographie Web Crypto API : PBKDF2-HMAC-SHA256 (600 000 tours) + AES-256-GCM authentifié (avec AAD)
+// Synchronisation inter-appareils via Lien Chiffré Compressé (#sync=...) sur GitHub Pages ou fichier .pulsevault
 
-import { LS_KEYS } from '../db/database.js';
+import {
+  LS_KEYS,
+  safeJsonParse,
+  getEncryptedAccountRecord,
+  saveEncryptedAccountRecord,
+} from '../db/database.js';
 
 const PBKDF2_ITERATIONS = 600000;
+
+// Anti-brute-force en mémoire et sessionStorage
+const LOCKOUT_KEY = 'pulsefit_auth_lockout_v1';
 
 function bytesToBase64(bytes) {
   let binary = '';
@@ -24,7 +32,69 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
-async function deriveAesGcmKey(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
+function toBase64Url(bytes) {
+  return bytesToBase64(bytes)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function fromBase64Url(str) {
+  let b64 = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4 !== 0) b64 += '=';
+  return base64ToBytes(b64);
+}
+
+export function normalizeUsername(raw = '') {
+  return String(raw)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, '')
+    .slice(0, 30);
+}
+
+function checkRateLimit(username) {
+  try {
+    const map = safeJsonParse(sessionStorage.getItem(LOCKOUT_KEY) || '{}', {});
+    const entry = map[username];
+    if (entry && entry.lockedUntil && Date.now() < entry.lockedUntil) {
+      const waitSec = Math.ceil((entry.lockedUntil - Date.now()) / 1000);
+      throw new Error(
+        `Protection anti-piratage : réessaie dans ${waitSec}s après plusieurs tentatives échouées.`
+      );
+    }
+  } catch (err) {
+    if (err.message?.includes('Protection anti-piratage')) throw err;
+  }
+}
+
+function recordFailedAttempt(username) {
+  try {
+    const map = safeJsonParse(sessionStorage.getItem(LOCKOUT_KEY) || '{}', {});
+    const prev = map[username] || { count: 0, lockedUntil: 0 };
+    const nextCount = prev.count + 1;
+    const lockMs = nextCount >= 5 ? Math.min(300000, 15000 * Math.pow(2, nextCount - 5)) : 0;
+    map[username] = {
+      count: nextCount,
+      lockedUntil: lockMs > 0 ? Date.now() + lockMs : 0,
+    };
+    sessionStorage.setItem(LOCKOUT_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage quota
+  }
+}
+
+function clearFailedAttempts(username) {
+  try {
+    const map = safeJsonParse(sessionStorage.getItem(LOCKOUT_KEY) || '{}', {});
+    delete map[username];
+    sessionStorage.setItem(LOCKOUT_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore
+  }
+}
+
+async function deriveUnextractableKey(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
   const enc = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -43,271 +113,406 @@ async function deriveAesGcmKey(password, saltBytes, iterations = PBKDF2_ITERATIO
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
-    false,
+    false, // extractable: false -> impossible à lire même depuis la console JS
     ['encrypt', 'decrypt']
   );
 }
 
-/**
- * Chiffre n'importe quel objet JSON en AES-256-GCM avec sel et IV uniques
- */
-export async function encryptVaultData(dataObject, masterPassword) {
-  if (!masterPassword || masterPassword.length < 6) {
-    throw new Error('Le mot de passe doit contenir au moins 6 caractères.');
+async function compressString(str) {
+  const rawBytes = new TextEncoder().encode(str);
+  if (typeof CompressionStream === 'undefined') {
+    return { bytes: rawBytes, compressed: false };
   }
+  const cs = new CompressionStream('deflate-raw');
+  const writer = cs.writable.getWriter();
+  writer.write(rawBytes);
+  writer.close();
+  const buf = await new Response(cs.readable).arrayBuffer();
+  return { bytes: new Uint8Array(buf), compressed: true };
+}
 
-  const salt = window.crypto.getRandomValues(new Uint8Array(16));
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveAesGcmKey(masterPassword, salt, PBKDF2_ITERATIONS);
-
-  const encodedPlaintext = new TextEncoder().encode(JSON.stringify(dataObject));
-  const cipherBuffer = await window.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    encodedPlaintext
-  );
-
-  return {
-    vaultFormat: 'PulseFit-ZeroKnowledge-v1',
-    cipher: 'AES-256-GCM',
-    kdf: 'PBKDF2-HMAC-SHA256',
-    iterations: PBKDF2_ITERATIONS,
-    salt: bytesToBase64(salt),
-    iv: bytesToBase64(iv),
-    ciphertext: bytesToBase64(new Uint8Array(cipherBuffer)),
-    encryptedAt: new Date().toISOString(),
-  };
+async function decompressBytes(bytes, isCompressed) {
+  if (!isCompressed || typeof DecompressionStream === 'undefined') {
+    return new TextDecoder().decode(bytes);
+  }
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  const buf = await new Response(ds.readable).arrayBuffer();
+  return new TextDecoder().decode(buf);
 }
 
 /**
- * Déchiffre et vérifie l'intégrité cryptographique d'une enveloppe AES-256-GCM
- */
-export async function decryptVaultData(envelope, masterPassword) {
-  if (!envelope || envelope.cipher !== 'AES-256-GCM' || !envelope.ciphertext) {
-    throw new Error('Format de coffre chiffré non valide.');
-  }
-
-  try {
-    const salt = base64ToBytes(envelope.salt);
-    const iv = base64ToBytes(envelope.iv);
-    const ciphertext = base64ToBytes(envelope.ciphertext);
-    const iterations = Number(envelope.iterations) || PBKDF2_ITERATIONS;
-
-    const key = await deriveAesGcmKey(masterPassword, salt, iterations);
-    const plainBuffer = await window.crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      ciphertext
-    );
-
-    const decoded = new TextDecoder().decode(plainBuffer);
-    return JSON.parse(decoded);
-  } catch {
-    throw new Error('Mot de passe incorrect ou coffre altéré (échec vérification AES-GCM).');
-  }
-}
-
-/**
- * Évalue l'entropie et la robustesse d'un mot de passe contre le brute-force
+ * Évalue l'entropie et la robustesse du mot de passe
  */
 export function evaluatePasswordStrength(pwd = '') {
-  if (!pwd) return { score: 0, label: 'Vide', color: 'bg-zinc-700' };
+  if (!pwd) return { score: 0, bits: 0, label: 'Vide', color: 'bg-zinc-600' };
   let pool = 0;
   if (/[a-z]/.test(pwd)) pool += 26;
   if (/[A-Z]/.test(pwd)) pool += 26;
   if (/[0-9]/.test(pwd)) pool += 10;
   if (/[^a-zA-Z0-9]/.test(pwd)) pool += 32;
 
-  const entropyBits = Math.round(pwd.length * Math.log2(Math.max(2, pool)));
-
-  if (entropyBits < 40 || pwd.length < 8) {
-    return { score: 1, bits: entropyBits, label: 'Faible (min. 8 car. conseillés)', color: 'bg-rose-500' };
+  const bits = Math.round(pwd.length * Math.log2(Math.max(2, pool)));
+  if (pwd.length < 8 || bits < 42) {
+    return { score: 1, bits, label: 'Faible (8+ caractères requis)', color: 'bg-rose-500' };
   }
-  if (entropyBits < 65) {
-    return { score: 2, bits: entropyBits, label: 'Correcte', color: 'bg-amber-400' };
+  if (bits < 64) {
+    return { score: 2, bits, label: 'Bonne', color: 'bg-amber-400' };
   }
-  if (entropyBits < 85) {
-    return { score: 3, bits: entropyBits, label: 'Forte (Anti-Brute-Force)', color: 'bg-emerald-400' };
+  if (bits < 85) {
+    return { score: 3, bits, label: 'Forte (Anti-Brute-Force)', color: 'bg-emerald-400' };
   }
-  return { score: 4, bits: entropyBits, label: 'Militaire (>85 bits)', color: 'bg-emerald-400' };
+  return { score: 4, bits, label: 'Maximale (>85 bits)', color: 'bg-emerald-400' };
 }
 
-function sanitizeAccountSlug(accountId = '') {
-  return (
-    String(accountId)
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '')
-      .slice(0, 32) || 'default'
-  );
-}
-
-export function loadVaultMetadata() {
+export function getActiveAccountUsername() {
   try {
-    const raw = localStorage.getItem(LS_KEYS.CLOUD_VAULT_META);
-    return raw ? JSON.parse(raw) : null;
+    return localStorage.getItem(LS_KEYS.ACTIVE_ACCOUNT) || null;
   } catch {
     return null;
   }
 }
 
-export function saveVaultMetadata(meta) {
-  if (!meta) {
-    localStorage.removeItem(LS_KEYS.CLOUD_VAULT_META);
-    return;
+export function setActiveAccountUsername(username) {
+  try {
+    if (!username) localStorage.removeItem(LS_KEYS.ACTIVE_ACCOUNT);
+    else localStorage.setItem(LS_KEYS.ACTIVE_ACCOUNT, normalizeUsername(username));
+  } catch {
+    // Ignore
   }
-  localStorage.setItem(LS_KEYS.CLOUD_VAULT_META, JSON.stringify(meta));
 }
 
 /**
- * Recherche automatiquement le Gist privé correspondant au compte sur GitHub
+ * Chiffre un objet JSON avec une clé AES-GCM déjà dérivée et un AAD lié au compte
  */
-async function findExistingVaultGist(githubToken, vaultFileName) {
-  const res = await fetch('https://api.github.com/gists?per_page=100', {
-    headers: {
-      Authorization: `Bearer ${githubToken}`,
-      Accept: 'application/vnd.github+json',
-    },
-  });
+async function encryptWithDerivedKey(key, username, dataObject) {
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const aad = new TextEncoder().encode(`pulsefit:${username}`);
+  const plainBytes = new TextEncoder().encode(JSON.stringify(dataObject));
 
-  if (res.status === 401) {
-    throw new Error('Clé GitHub invalide ou expirée (vérifie le droit "gist").');
-  }
-  if (!res.ok) {
-    throw new Error(`Erreur API GitHub (${res.status}).`);
-  }
-
-  const gists = await res.json();
-  return gists.find((g) => g.files && g.files[vaultFileName]) || null;
-}
-
-/**
- * Chiffre toute la base locale en AES-256-GCM et la sauvegarde sur un Gist privé GitHub
- */
-export async function syncPushToGitHubVault({
-  accountId,
-  masterPassword,
-  githubToken,
-  fullBackupPayload,
-}) {
-  const slug = sanitizeAccountSlug(accountId);
-  const fileName = `pulsefit_vault_${slug}.enc.json`;
-
-  // 1. Chiffrement Zero-Knowledge côté client avant tout envoi réseau
-  const encryptedVault = await encryptVaultData(
-    {
-      accountId: slug,
-      payload: fullBackupPayload,
-    },
-    masterPassword
+  const cipherBuf = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: aad },
+    key,
+    plainBytes
   );
 
-  const fileContent = JSON.stringify(encryptedVault, null, 2);
-
-  // 2. Recherche si un coffre existe déjà pour ce compte
-  const existingGist = await findExistingVaultGist(githubToken, fileName);
-
-  let savedGist;
-  if (existingGist) {
-    const updateRes = await fetch(`https://api.github.com/gists/${existingGist.id}`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        description: `PulseFit Zero-Knowledge Encrypted Vault (${slug})`,
-        files: {
-          [fileName]: { content: fileContent },
-        },
-      }),
-    });
-    if (!updateRes.ok) throw new Error(`Échec mise à jour Cloud GitHub (${updateRes.status})`);
-    savedGist = await updateRes.json();
-  } else {
-    const createRes = await fetch('https://api.github.com/gists', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        description: `PulseFit Zero-Knowledge Encrypted Vault (${slug})`,
-        public: false,
-        files: {
-          [fileName]: { content: fileContent },
-        },
-      }),
-    });
-    if (!createRes.ok) throw new Error(`Échec création coffre GitHub (${createRes.status})`);
-    savedGist = await createRes.json();
-  }
-
-  // 3. Chiffre le jeton GitHub au repos avec le Mot de Passe Maître (jamais stocké en clair !)
-  const encryptedTokenEnvelope = await encryptVaultData({ token: githubToken }, masterPassword);
-  const meta = {
-    accountId: slug,
-    gistId: savedGist.id,
-    encryptedToken: encryptedTokenEnvelope,
-    lastSyncAt: new Date().toISOString(),
+  return {
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(cipherBuf)),
   };
-  saveVaultMetadata(meta);
+}
 
-  return meta;
+async function decryptWithDerivedKey(key, username, ivB64, cipherB64) {
+  const iv = base64ToBytes(ivB64);
+  const cipherBytes = base64ToBytes(cipherB64);
+  const aad = new TextEncoder().encode(`pulsefit:${username}`);
+
+  const plainBuf = await window.crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, additionalData: aad },
+    key,
+    cipherBytes
+  );
+
+  const jsonStr = new TextDecoder().decode(plainBuf);
+  const parsed = safeJsonParse(jsonStr, null);
+  if (!parsed) throw new Error('Données corrompues.');
+  return parsed;
 }
 
 /**
- * Télécharge le coffre chiffré depuis GitHub sur un nouvel appareil et le déchiffre localement
+ * CRÉATION DE COMPTE UTILISATEUR + MOT DE PASSE
  */
-export async function syncPullFromGitHubVault({
-  accountId,
-  masterPassword,
-  githubToken,
-  explicitGistId = '',
-}) {
-  const slug = sanitizeAccountSlug(accountId);
-  const fileName = `pulsefit_vault_${slug}.enc.json`;
+export async function registerUserAccount(rawUsername, password, initialBackupData) {
+  const username = normalizeUsername(rawUsername);
+  if (username.length < 3) {
+    throw new Error('L’identifiant doit contenir au moins 3 caractères (lettres/chiffres).');
+  }
+  if (!password || password.length < 8) {
+    throw new Error('Pour ta sécurité, le mot de passe doit contenir au moins 8 caractères.');
+  }
 
-  let targetGistId = explicitGistId.trim();
-  if (!targetGistId) {
-    if (!githubToken) {
-      throw new Error('Renseigne ta clé GitHub Gist ou ton ID de coffre pour restaurer.');
+  const existing = await getEncryptedAccountRecord(username);
+  if (existing) {
+    throw new Error(`Le compte "${username}" existe déjà sur cet appareil. Connecte-toi !`);
+  }
+
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const sessionKey = await deriveUnextractableKey(password, salt, PBKDF2_ITERATIONS);
+  const { iv, ciphertext } = await encryptWithDerivedKey(
+    sessionKey,
+    username,
+    initialBackupData
+  );
+
+  const saltBase64 = bytesToBase64(salt);
+  await saveEncryptedAccountRecord({
+    username,
+    cipher: 'AES-256-GCM',
+    kdf: 'PBKDF2-HMAC-SHA256',
+    iterations: PBKDF2_ITERATIONS,
+    salt: saltBase64,
+    iv,
+    ciphertext,
+    updatedAt: new Date().toISOString(),
+  });
+
+  setActiveAccountUsername(username);
+  return { username, sessionKey, saltBase64 };
+}
+
+/**
+ * CONNEXION UTILISATEUR + MOT DE PASSE (avec anti-brute-force)
+ */
+export async function loginUserAccount(rawUsername, password) {
+  const username = normalizeUsername(rawUsername);
+  if (!username || !password) {
+    throw new Error('Renseigne ton identifiant et ton mot de passe.');
+  }
+
+  checkRateLimit(username);
+
+  const record = await getEncryptedAccountRecord(username);
+  if (!record) {
+    throw new Error(
+      `Aucun compte "${username}" sur cet appareil. Crée un compte ou ouvre ton lien/fichier de synchronisation si tu viens d'un autre appareil.`
+    );
+  }
+
+  try {
+    const saltBytes = base64ToBytes(record.salt);
+    const sessionKey = await deriveUnextractableKey(
+      password,
+      saltBytes,
+      Number(record.iterations) || PBKDF2_ITERATIONS
+    );
+
+    const decryptedBackup = await decryptWithDerivedKey(
+      sessionKey,
+      username,
+      record.iv,
+      record.ciphertext
+    );
+
+    clearFailedAttempts(username);
+    setActiveAccountUsername(username);
+
+    return {
+      username,
+      sessionKey,
+      saltBase64: record.salt,
+      payload: decryptedBackup,
+    };
+  } catch {
+    recordFailedAttempt(username);
+    throw new Error('Identifiant ou mot de passe incorrect.');
+  }
+}
+
+/**
+ * SAUVEGARDE CONTINUE CHIFFRÉE EN ARRIÈRE-PLAN (via la CryptoKey non-extractible en RAM)
+ */
+export async function saveEncryptedSessionSnapshot(
+  username,
+  sessionKey,
+  saltBase64,
+  backupPayload
+) {
+  if (!username || !sessionKey || !saltBase64) return;
+  const { iv, ciphertext } = await encryptWithDerivedKey(
+    sessionKey,
+    username,
+    backupPayload
+  );
+
+  await saveEncryptedAccountRecord({
+    username,
+    cipher: 'AES-256-GCM',
+    kdf: 'PBKDF2-HMAC-SHA256',
+    iterations: PBKDF2_ITERATIONS,
+    salt: saltBase64,
+    iv,
+    ciphertext,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * GÉNÈRE UN LIEN DE TRANSFERT MULTI-APPAREILS 100% GITHUB PAGES (Compressé + AES-256-GCM)
+ * Permet de retrouver son compte sur un nouveau téléphone/PC sans aucun serveur externe !
+ */
+export async function generateEncryptedSyncLink(rawUsername, password, backupPayload) {
+  const username = normalizeUsername(rawUsername);
+  if (!username || !password || password.length < 8) {
+    throw new Error('Saisis ton mot de passe (8+ caractères) pour signer le lien de transfert.');
+  }
+
+  // Allège l'historique de bavardage du chat dans le lien URL pour garder un lien compact
+  const compactBackup = {
+    ...backupPayload,
+    indexedDB: {
+      ...(backupPayload.indexedDB || {}),
+      coachMessages: (backupPayload.indexedDB?.coachMessages || []).slice(-10),
+    },
+  };
+
+  const { bytes: compressedBytes, compressed } = await compressString(
+    JSON.stringify(compactBackup)
+  );
+
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveUnextractableKey(password, salt, PBKDF2_ITERATIONS);
+  const aad = new TextEncoder().encode(`pulsefit:${username}`);
+
+  const cipherBuf = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: aad },
+    key,
+    compressedBytes
+  );
+
+  const flag = compressed ? '1' : '0';
+  const tokenParts = [
+    username,
+    flag,
+    toBase64Url(salt),
+    toBase64Url(iv),
+    toBase64Url(new Uint8Array(cipherBuf)),
+  ].join('.');
+
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+  return `${baseUrl}#sync=${tokenParts}`;
+}
+
+/**
+ * Détecte si l'URL courante contient un lien de synchronisation inter-appareils (#sync=...)
+ */
+export function inspectPendingSyncHash(hashStr = window.location.hash) {
+  if (!hashStr || !hashStr.startsWith('#sync=')) return null;
+  const raw = hashStr.slice(6);
+  const parts = raw.split('.');
+  if (parts.length !== 5) return null;
+  return {
+    username: normalizeUsername(parts[0]),
+    rawToken: raw,
+  };
+}
+
+/**
+ * Déverrouille un lien #sync=... sur un nouvel appareil avec le mot de passe du compte
+ */
+export async function unlockSyncTokenAndImport(rawToken, password) {
+  const parts = String(rawToken || '').split('.');
+  if (parts.length !== 5) {
+    throw new Error('Lien de synchronisation incomplet ou invalide.');
+  }
+
+  const [rawUser, flag, saltUrl, ivUrl, cipherUrl] = parts;
+  const username = normalizeUsername(rawUser);
+  checkRateLimit(username);
+
+  try {
+    const salt = fromBase64Url(saltUrl);
+    const iv = fromBase64Url(ivUrl);
+    const cipherBytes = fromBase64Url(cipherUrl);
+    const aad = new TextEncoder().encode(`pulsefit:${username}`);
+
+    const sessionKey = await deriveUnextractableKey(password, salt, PBKDF2_ITERATIONS);
+    const plainBuf = await window.crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, additionalData: aad },
+      sessionKey,
+      cipherBytes
+    );
+
+    const jsonStr = await decompressBytes(new Uint8Array(plainBuf), flag === '1');
+    const payload = safeJsonParse(jsonStr, null);
+    if (!payload || !payload.indexedDB) {
+      throw new Error('Contenu invalide.');
     }
-    const found = await findExistingVaultGist(githubToken, fileName);
-    if (!found) {
-      throw new Error(`Aucun coffre "${fileName}" trouvé sur ce compte GitHub.`);
+
+    // Enregistre et chiffre immédiatement le compte sur ce nouvel appareil !
+    const saltBase64 = bytesToBase64(salt);
+    await saveEncryptedSessionSnapshot(username, sessionKey, saltBase64, payload);
+    clearFailedAttempts(username);
+    setActiveAccountUsername(username);
+
+    return { username, sessionKey, saltBase64, payload };
+  } catch {
+    recordFailedAttempt(username);
+    throw new Error('Mot de passe incorrect ou lien altéré.');
+  }
+}
+
+/**
+ * Export / Import de fichier coffre chiffré .pulsevault (AES-256-GCM, capacité illimitée)
+ */
+export async function encryptVaultData(dataObject, password, rawUsername = 'vault') {
+  if (!password || password.length < 8) {
+    throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
+  }
+  const username = normalizeUsername(rawUsername);
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveUnextractableKey(password, salt, PBKDF2_ITERATIONS);
+  const { iv, ciphertext } = await encryptWithDerivedKey(key, username, dataObject);
+
+  return {
+    vaultFormat: 'PulseFit-E2EE-v2',
+    username,
+    cipher: 'AES-256-GCM',
+    kdf: 'PBKDF2-HMAC-SHA256',
+    iterations: PBKDF2_ITERATIONS,
+    salt: bytesToBase64(salt),
+    iv,
+    ciphertext,
+    encryptedAt: new Date().toISOString(),
+  };
+}
+
+export async function decryptVaultData(envelope, password) {
+  if (!envelope || envelope.cipher !== 'AES-256-GCM' || !envelope.ciphertext) {
+    throw new Error('Fichier coffre non reconnu.');
+  }
+  const username = normalizeUsername(envelope.username || 'vault');
+  checkRateLimit(username);
+
+  try {
+    const salt = base64ToBytes(envelope.salt);
+    const sessionKey = await deriveUnextractableKey(
+      password,
+      salt,
+      Number(envelope.iterations) || PBKDF2_ITERATIONS
+    );
+
+    let payload;
+    if (envelope.vaultFormat === 'PulseFit-E2EE-v2') {
+      payload = await decryptWithDerivedKey(
+        sessionKey,
+        username,
+        envelope.iv,
+        envelope.ciphertext
+      );
+    } else {
+      // Rétrocompatibilité enveloppes v1
+      const iv = base64ToBytes(envelope.iv);
+      const cipherBytes = base64ToBytes(envelope.ciphertext);
+      const plainBuf = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        sessionKey,
+        cipherBytes
+      );
+      payload = safeJsonParse(new TextDecoder().decode(plainBuf), null);
     }
-    targetGistId = found.id;
+
+    clearFailedAttempts(username);
+    return {
+      username,
+      sessionKey,
+      saltBase64: envelope.salt,
+      payload,
+    };
+  } catch {
+    recordFailedAttempt(username);
+    throw new Error('Mot de passe incorrect ou fichier altéré.');
   }
-
-  const headers = { Accept: 'application/vnd.github+json' };
-  if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
-
-  const res = await fetch(`https://api.github.com/gists/${targetGistId}`, { headers });
-  if (!res.ok) throw new Error(`Impossible de récupérer le coffre (${res.status}).`);
-  const gistData = await res.json();
-
-  const fileEntry =
-    gistData.files?.[fileName] ||
-    Object.values(gistData.files || {}).find((f) => f.filename?.endsWith('.enc.json'));
-
-  if (!fileEntry || !fileEntry.content) {
-    throw new Error('Fichier de coffre chiffré introuvable dans ce Gist.');
-  }
-
-  const envelope = JSON.parse(fileEntry.content);
-  const decrypted = await decryptVaultData(envelope, masterPassword);
-
-  if (githubToken) {
-    const encryptedTokenEnvelope = await encryptVaultData({ token: githubToken }, masterPassword);
-    saveVaultMetadata({
-      accountId: slug,
-      gistId: targetGistId,
-      encryptedToken: encryptedTokenEnvelope,
-      lastSyncAt: new Date().toISOString(),
-    });
-  }
-
-  return decrypted.payload;
 }

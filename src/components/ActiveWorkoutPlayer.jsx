@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   Minimize2,
@@ -53,6 +53,8 @@ export default function ActiveWorkoutPlayer({
     total: 40,
   });
 
+  const [completedEffortSetSignal, setCompletedEffortSetSignal] = useState(null);
+
   const exercises = session?.exercises || [];
   const currentExercise = exercises[currentExIdx] || exercises[0];
 
@@ -74,50 +76,109 @@ export default function ActiveWorkoutPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentExIdx, Math.floor(elapsedSec / 5)]);
 
+  // Timer de repos (effets sonores hors du setter pur)
   useEffect(() => {
     if (!restTimer.active || restTimer.paused) return;
     const id = setInterval(() => {
       setRestTimer((prev) => {
         if (prev.remaining <= 1) {
-          if (soundEnabled) playRestFinishedAlert();
-          return { ...prev, active: false, remaining: 0 };
+          return { ...prev, active: false, remaining: 0, justFinished: true };
         }
-        if (prev.remaining <= 4 && soundEnabled) playTickBeep();
         return { ...prev, remaining: prev.remaining - 1 };
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [restTimer.active, restTimer.paused, soundEnabled]);
+  }, [restTimer.active, restTimer.paused]);
 
+  useEffect(() => {
+    if (!soundEnabled) return;
+    if (restTimer.justFinished) {
+      playRestFinishedAlert();
+      setRestTimer((prev) => ({ ...prev, justFinished: false }));
+    } else if (restTimer.active && !restTimer.paused && restTimer.remaining > 0 && restTimer.remaining <= 3) {
+      playTickBeep();
+    }
+  }, [restTimer.remaining, restTimer.justFinished, restTimer.active, restTimer.paused, soundEnabled]);
+
+  // Timer d'effort (sans appel d'état parent dans l'updater React)
   useEffect(() => {
     if (!effortTimer.active || effortTimer.paused) return;
     const id = setInterval(() => {
       setEffortTimer((prev) => {
         if (prev.remaining <= 1) {
-          if (soundEnabled) playRestFinishedAlert();
-          if (prev.setIndex !== null) {
-            handleToggleSetComplete(currentExIdx, prev.setIndex, true);
-          }
+          setCompletedEffortSetSignal(prev.setIndex);
           return { active: false, paused: false, setIndex: null, remaining: 0, total: 40 };
         }
-        if (prev.remaining <= 4 && soundEnabled) playTickBeep();
         return { ...prev, remaining: prev.remaining - 1 };
       });
     }, 1000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => clearInterval(id);
-  }, [effortTimer.active, effortTimer.paused, soundEnabled, currentExIdx]);
+  }, [effortTimer.active, effortTimer.paused]);
+
+  useEffect(() => {
+    if (soundEnabled && effortTimer.active && !effortTimer.paused && effortTimer.remaining > 0 && effortTimer.remaining <= 3) {
+      playTickBeep();
+    }
+  }, [effortTimer.remaining, effortTimer.active, effortTimer.paused, soundEnabled]);
+
+  const updateExercises = useCallback(
+    (updatedList) => {
+      if (!session) return;
+      onPersistSession({
+        ...session,
+        exercises: updatedList,
+        currentExIdx,
+        elapsedSec,
+      });
+    },
+    [session, onPersistSession, currentExIdx, elapsedSec]
+  );
+
+  const handleToggleSetComplete = useCallback(
+    (exIndex, setIndex, forceTrue = false) => {
+      const targetEx = exercises[exIndex];
+      if (!targetEx) return;
+      const currentRow = targetEx.setRows[setIndex];
+      const nextCompleted = forceTrue ? true : !currentRow.completed;
+
+      const next = exercises.map((ex, i) => {
+        if (i !== exIndex) return ex;
+        return {
+          ...ex,
+          setRows: ex.setRows.map((row, sIdx) =>
+            sIdx === setIndex ? { ...row, completed: nextCompleted } : row
+          ),
+        };
+      });
+      updateExercises(next);
+
+      if (nextCompleted) {
+        if (soundEnabled) {
+          if (forceTrue) playRestFinishedAlert();
+          else playSetValidatedPop();
+        }
+        const restDur = Number(targetEx.restSeconds) || 60;
+        setRestTimer({
+          active: true,
+          paused: false,
+          remaining: restDur,
+          total: restDur,
+          justFinished: false,
+        });
+      }
+    },
+    [exercises, updateExercises, soundEnabled]
+  );
+
+  useEffect(() => {
+    if (completedEffortSetSignal !== null) {
+      const sIdx = completedEffortSetSignal;
+      setCompletedEffortSetSignal(null);
+      handleToggleSetComplete(currentExIdx, sIdx, true);
+    }
+  }, [completedEffortSetSignal, currentExIdx, handleToggleSetComplete]);
 
   if (!session || !currentExercise) return null;
-
-  const updateExercises = (updatedList) => {
-    onPersistSession({
-      ...session,
-      exercises: updatedList,
-      currentExIdx,
-      elapsedSec,
-    });
-  };
 
   const handleUpdateSetField = (exIndex, setIndex, field, value) => {
     const next = exercises.map((ex, i) => {
@@ -130,34 +191,6 @@ export default function ActiveWorkoutPlayer({
       };
     });
     updateExercises(next);
-  };
-
-  const handleToggleSetComplete = (exIndex, setIndex, forceTrue = false) => {
-    const targetEx = exercises[exIndex];
-    const currentRow = targetEx.setRows[setIndex];
-    const nextCompleted = forceTrue ? true : !currentRow.completed;
-
-    const next = exercises.map((ex, i) => {
-      if (i !== exIndex) return ex;
-      return {
-        ...ex,
-        setRows: ex.setRows.map((row, sIdx) =>
-          sIdx === setIndex ? { ...row, completed: nextCompleted } : row
-        ),
-      };
-    });
-    updateExercises(next);
-
-    if (nextCompleted) {
-      if (soundEnabled && !forceTrue) playSetValidatedPop();
-      const restDur = Number(targetEx.restSeconds) || 60;
-      setRestTimer({
-        active: true,
-        paused: false,
-        remaining: restDur,
-        total: restDur,
-      });
-    }
   };
 
   const handleSwapToAlternative = () => {
@@ -226,31 +259,31 @@ export default function ActiveWorkoutPlayer({
 
   if (showSummary) {
     return (
-      <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col items-center justify-center p-6 animate-fade-in">
+      <div className="fixed inset-0 z-50 bg-[var(--bg-app)] flex flex-col items-center justify-center p-6 animate-fade-in">
         <div className="w-full max-w-sm card-elevated p-7 text-center space-y-6">
           <div>
             <span className="text-xs font-medium text-emerald-400">Séance validée</span>
-            <h2 className="text-xl font-bold text-zinc-50 mt-1">
+            <h2 className="text-xl font-bold text-[var(--text-primary)] mt-1">
               {session.workoutTitle}
             </h2>
           </div>
 
           <div className="grid grid-cols-3 gap-2.5">
-            <div className="bg-zinc-950/80 rounded-2xl p-3 border border-white/[0.06]">
-              <span className="block text-[10px] text-zinc-500">Durée</span>
-              <span className="text-base font-bold text-zinc-100 tabular-nums">
+            <div className="bg-[var(--bg-subtle)] rounded-2xl p-3">
+              <span className="block text-[10px] text-[var(--text-muted)]">Durée</span>
+              <span className="text-base font-bold text-[var(--text-primary)] tabular-nums">
                 {formatClock(elapsedSec)}
               </span>
             </div>
-            <div className="bg-zinc-950/80 rounded-2xl p-3 border border-white/[0.06]">
-              <span className="block text-[10px] text-zinc-500">Séries</span>
+            <div className="bg-[var(--bg-subtle)] rounded-2xl p-3">
+              <span className="block text-[10px] text-[var(--text-muted)]">Séries</span>
               <span className="text-base font-bold text-emerald-400 tabular-nums">
                 {completedSetsCount}/{totalSetsCount}
               </span>
             </div>
-            <div className="bg-zinc-950/80 rounded-2xl p-3 border border-white/[0.06]">
-              <span className="block text-[10px] text-zinc-500">Volume</span>
-              <span className="text-base font-bold text-zinc-100 tabular-nums">
+            <div className="bg-[var(--bg-subtle)] rounded-2xl p-3">
+              <span className="block text-[10px] text-[var(--text-muted)]">Volume</span>
+              <span className="text-base font-bold text-[var(--text-primary)] tabular-nums">
                 {Math.round(totalVolumeKg)} kg
               </span>
             </div>
@@ -269,23 +302,22 @@ export default function ActiveWorkoutPlayer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col pt-safe pb-safe overflow-hidden animate-fade-in">
-      {/* Top Bar minimaliste */}
+    <div className="fixed inset-0 z-50 bg-[var(--bg-app)] text-[var(--text-primary)] flex flex-col pt-safe pb-safe overflow-hidden animate-fade-in">
       <div className="px-4 py-3 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
             type="button"
             onClick={onMinimize}
-            className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-400 hover:text-zinc-100"
+            className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
             title="Réduire"
           >
             <Minimize2 className="w-4 h-4" />
           </button>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-zinc-100 truncate">
+            <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
               {session.workoutTitle}
             </p>
-            <p className="text-[11px] text-zinc-500 tabular-nums">
+            <p className="text-[11px] text-[var(--text-muted)] tabular-nums">
               {formatClock(elapsedSec)} · {completedSetsCount}/{totalSetsCount} séries
             </p>
           </div>
@@ -295,19 +327,19 @@ export default function ActiveWorkoutPlayer({
           <button
             type="button"
             onClick={() => setSoundEnabled((v) => !v)}
-            className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-400"
+            className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
           >
             {soundEnabled ? (
               <Volume2 className="w-4 h-4 text-emerald-400" />
             ) : (
-              <VolumeX className="w-4 h-4 text-zinc-600" />
+              <VolumeX className="w-4 h-4 text-[var(--text-muted)]" />
             )}
           </button>
 
           <button
             type="button"
             onClick={handleFinishSession}
-            className="px-3.5 py-1.5 rounded-full bg-zinc-100 text-zinc-950 text-xs font-semibold"
+            className="btn-primary !py-1.5 !px-3.5 !text-xs"
           >
             Terminer
           </button>
@@ -317,22 +349,20 @@ export default function ActiveWorkoutPlayer({
             onClick={() => {
               if (window.confirm('Abandonner la séance ?')) onCancelSession();
             }}
-            className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-500 hover:text-rose-400"
+            className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-muted)] hover:text-rose-400"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Ligne de progression */}
-      <div className="h-[2px] w-full bg-zinc-900 shrink-0">
+      <div className="h-[2px] w-full bg-[var(--bg-subtle)] shrink-0">
         <div
           className="h-full bg-emerald-400 transition-all duration-300"
           style={{ width: `${progressPct}%` }}
         />
       </div>
 
-      {/* Pilules exercices */}
       <div className="px-4 py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
         {exercises.map((ex, idx) => {
           const allDone = ex.setRows.every((s) => s.completed);
@@ -344,10 +374,10 @@ export default function ActiveWorkoutPlayer({
               onClick={() => setCurrentExIdx(idx)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 isCurrent
-                  ? 'bg-zinc-100 text-zinc-950 font-semibold'
+                  ? 'bg-emerald-400 text-zinc-950 font-semibold'
                   : allDone
-                  ? 'bg-emerald-400/15 text-emerald-300'
-                  : 'bg-zinc-900 text-zinc-400'
+                  ? 'bg-emerald-400/15 text-emerald-400'
+                  : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
               }`}
             >
               <span>{idx + 1}</span>
@@ -357,18 +387,17 @@ export default function ActiveWorkoutPlayer({
         })}
       </div>
 
-      {/* Corps central */}
       <div className="flex-1 overflow-y-auto px-5 py-3 max-w-lg w-full mx-auto space-y-5">
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-zinc-500">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>{currentExercise.muscle}</span>
             <span className="tabular-nums">Repos {currentExercise.restSeconds || 60}s</span>
           </div>
-          <h3 className="text-xl font-bold text-zinc-50 tracking-tight">
+          <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
             {currentExercise.name}
           </h3>
           {currentExercise.cue && (
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               {currentExercise.cue}
             </p>
           )}
@@ -376,7 +405,7 @@ export default function ActiveWorkoutPlayer({
             <button
               type="button"
               onClick={handleSwapToAlternative}
-              className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 pt-0.5"
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-400 pt-0.5"
             >
               <RefreshCw className="w-3 h-3" />
               Variante : {currentExercise.alternative}
@@ -384,14 +413,13 @@ export default function ActiveWorkoutPlayer({
           )}
         </div>
 
-        {/* Chronomètre d'Effort */}
         {effortTimer.active && (
           <div className="card-surface p-4 flex items-center justify-between gap-3 border-emerald-400/30">
             <div>
               <p className="text-[11px] text-emerald-400">
-                Effort — Série {effortTimer.setIndex + 1}
+                Effort — Série {(effortTimer.setIndex ?? 0) + 1}
               </p>
-              <p className="text-3xl font-bold text-zinc-50 tabular-nums">
+              <p className="text-3xl font-bold text-[var(--text-primary)] tabular-nums">
                 {formatClock(effortTimer.remaining)}
               </p>
             </div>
@@ -430,9 +458,8 @@ export default function ActiveWorkoutPlayer({
           </div>
         )}
 
-        {/* Séries */}
         <div className="space-y-2">
-          <div className="grid grid-cols-12 px-2 text-[11px] text-zinc-500">
+          <div className="grid grid-cols-12 px-2 text-[11px] text-[var(--text-muted)]">
             <span className="col-span-2">Série</span>
             {currentExercise.type === 'timed' ? (
               <>
@@ -454,10 +481,10 @@ export default function ActiveWorkoutPlayer({
               className={`grid grid-cols-12 items-center gap-2 p-2.5 rounded-2xl border transition-all ${
                 row.completed
                   ? 'bg-emerald-400/10 border-emerald-400/30'
-                  : 'bg-zinc-900/60 border-white/[0.06]'
+                  : 'card-surface !rounded-2xl'
               }`}
             >
-              <div className="col-span-2 pl-1.5 text-xs font-semibold text-zinc-400 tabular-nums">
+              <div className="col-span-2 pl-1.5 text-xs font-semibold text-[var(--text-muted)] tabular-nums">
                 #{row.setNumber}
               </div>
 
@@ -478,7 +505,7 @@ export default function ActiveWorkoutPlayer({
                           e.target.value
                         )
                       }
-                      className="w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl py-1.5 px-2 text-center text-sm font-semibold text-zinc-100 tabular-nums focus:outline-none"
+                      className="input-dark !py-1.5 !px-2 text-center font-semibold tabular-nums"
                     />
                   </div>
                   <div className="col-span-3 flex justify-center">
@@ -487,7 +514,7 @@ export default function ActiveWorkoutPlayer({
                       onClick={() =>
                         startEffortCountdown(sIdx, row.durationSeconds || 40)
                       }
-                      className="px-3 py-1.5 rounded-full bg-zinc-800 text-xs font-medium text-zinc-200 inline-flex items-center gap-1"
+                      className="btn-secondary !py-1.5 !px-3 !text-xs"
                     >
                       <Play className="w-3 h-3 fill-current" />
                       Go
@@ -506,7 +533,7 @@ export default function ActiveWorkoutPlayer({
                       onChange={(e) =>
                         handleUpdateSetField(currentExIdx, sIdx, 'weightKg', e.target.value)
                       }
-                      className="w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl py-1.5 px-2 text-center text-sm font-semibold text-zinc-100 tabular-nums focus:outline-none"
+                      className="input-dark !py-1.5 !px-2 text-center font-semibold tabular-nums"
                     />
                   </div>
                   <div className="col-span-3">
@@ -518,7 +545,7 @@ export default function ActiveWorkoutPlayer({
                       onChange={(e) =>
                         handleUpdateSetField(currentExIdx, sIdx, 'reps', e.target.value)
                       }
-                      className="w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl py-1.5 px-2 text-center text-sm font-semibold text-zinc-100 tabular-nums focus:outline-none"
+                      className="input-dark !py-1.5 !px-2 text-center font-semibold tabular-nums"
                     />
                   </div>
                 </>
@@ -531,7 +558,7 @@ export default function ActiveWorkoutPlayer({
                   className={`w-full py-2 rounded-full font-semibold text-xs flex items-center justify-center transition-all active:scale-95 ${
                     row.completed
                       ? 'bg-emerald-400 text-zinc-950'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
                   }`}
                 >
                   <Check className="w-4 h-4" />
@@ -541,7 +568,6 @@ export default function ActiveWorkoutPlayer({
           ))}
         </div>
 
-        {/* Navigation bas */}
         <div className="flex items-center justify-between gap-3 pt-3">
           <button
             type="button"
@@ -574,15 +600,14 @@ export default function ActiveWorkoutPlayer({
         </div>
       </div>
 
-      {/* Timer de Repos flottant épuré */}
       {restTimer.active && (
-        <div className="border-t border-white/[0.07] bg-zinc-900/95 backdrop-blur-2xl px-5 py-4 shrink-0 animate-slide-up">
+        <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 backdrop-blur-2xl px-5 py-4 shrink-0 animate-slide-up">
           <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
             <div>
               <span className="text-[11px] text-emerald-400 font-medium block">
                 Repos
               </span>
-              <span className="text-2xl font-bold text-zinc-50 tabular-nums">
+              <span className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
                 {formatClock(restTimer.remaining)}
               </span>
             </div>

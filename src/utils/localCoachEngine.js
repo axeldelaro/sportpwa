@@ -130,8 +130,10 @@ const INTENT_RULES = [
   {
     id: 'joint_pain',
     keywords: [
-      'douleur', 'mal a', 'mal au', 'epaule', 'genou', 'lombaire', 'dos',
-      'pain', 'shoulder', 'knee', 'back', 'dolor', 'hombro', 'rodilla', 'espalda',
+      'douleur', 'douleurs', 'mal a', 'mal au', 'mal aux', 'epaule', 'genou', 'genoux',
+      'lombaire', 'lombaires', 'mal de dos', 'tendinite', 'blessure',
+      'shoulder pain', 'knee pain', 'back pain', 'joint pain', 'injury',
+      'dolor', 'lesion', 'hombro', 'rodilla', 'espalda',
     ],
     weight: 4,
   },
@@ -154,14 +156,19 @@ function detectTopIntent(normText, previousMemory) {
     }
   }
 
+  const padded = ` ${normText} `;
   let bestIntent = 'general';
   let bestScore = 0;
 
   for (const rule of INTENT_RULES) {
     let score = 0;
     for (const kw of rule.keywords) {
-      if (normText.includes(kw)) {
-        score += rule.weight + (kw.includes(' ') ? 1.5 : 0);
+      if (kw.includes(' ')) {
+        if (padded.includes(` ${kw} `)) score += rule.weight + 1.5;
+      } else {
+        // Correspondance par mot entier (évite "dos" dans "dosage" ou "eau" dans "gâteau")
+        const regex = new RegExp(`\\b${kw}s?\\b`);
+        if (regex.test(normText)) score += rule.weight;
       }
     }
     if (score > bestScore) {

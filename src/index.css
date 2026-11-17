@@ -5,13 +5,15 @@
 @layer base {
   :root {
     --bg-app: #09090b;
-    --bg-card: rgba(24, 24, 28, 0.65);
+    --bg-card: rgba(24, 24, 28, 0.72);
     --bg-elevated: #141418;
-    --bg-subtle: rgba(39, 39, 42, 0.65);
+    --bg-subtle: rgba(39, 39, 43, 0.72);
     --text-primary: #f4f4f5;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
-    --border-subtle: rgba(255, 255, 255, 0.065);
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --btn-primary-bg: #f4f4f5;
+    --btn-primary-fg: #09090b;
     color-scheme: dark;
   }
 
@@ -21,19 +23,37 @@
     --bg-elevated: #0f0f12;
     --bg-subtle: #16161a;
     --border-subtle: rgba(255, 255, 255, 0.09);
+    --btn-primary-bg: #ffffff;
+    --btn-primary-fg: #000000;
     color-scheme: dark;
   }
 
   html.theme-light {
     --bg-app: #f5f5f3;
-    --bg-card: rgba(255, 255, 255, 0.92);
+    --bg-card: rgba(255, 255, 255, 0.94);
     --bg-elevated: #ffffff;
-    --bg-subtle: #ededeb;
+    --bg-subtle: #eaeae6;
     --text-primary: #141416;
-    --text-secondary: #52525b;
+    --text-secondary: #4c4c54;
     --text-muted: #71717a;
-    --border-subtle: rgba(0, 0, 0, 0.075);
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --btn-primary-bg: #18181b;
+    --btn-primary-fg: #ffffff;
     color-scheme: light;
+  }
+
+  /* Lisibilité renforcée de l'émeraude sur fond clair Ivoire */
+  html.theme-light .text-emerald-400 {
+    color: #059669;
+  }
+  html.theme-light .text-sky-400 {
+    color: #0284c7;
+  }
+  html.theme-light .text-amber-400 {
+    color: #d97706;
+  }
+  html.theme-light .text-rose-400 {
+    color: #e11d48;
   }
 
   html,
@@ -45,59 +65,6 @@
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     transition: background-color 0.2s ease, color 0.2s ease;
-  }
-
-  /* Harmonisation automatique du mode Clair Ivoire sur les utilitaires sombres */
-  html.theme-light .bg-zinc-950,
-  html.theme-light .bg-zinc-950\/80,
-  html.theme-light .bg-zinc-950\/85,
-  html.theme-light .bg-zinc-950\/70,
-  html.theme-light .bg-zinc-950\/60 {
-    background-color: #f3f3f1 !important;
-  }
-
-  html.theme-light .bg-zinc-900,
-  html.theme-light .bg-zinc-900\/90,
-  html.theme-light .bg-zinc-900\/80,
-  html.theme-light .bg-zinc-900\/70,
-  html.theme-light .bg-zinc-900\/60 {
-    background-color: #eaeae7 !important;
-  }
-
-  html.theme-light .bg-zinc-800,
-  html.theme-light .bg-zinc-800\/80,
-  html.theme-light .bg-zinc-800\/70 {
-    background-color: #e1e1dd !important;
-  }
-
-  html.theme-light .text-zinc-50,
-  html.theme-light .text-zinc-100,
-  html.theme-light .text-white {
-    color: #141416 !important;
-  }
-
-  html.theme-light .text-zinc-200,
-  html.theme-light .text-zinc-300 {
-    color: #27272a !important;
-  }
-
-  html.theme-light .text-zinc-400,
-  html.theme-light .text-zinc-500 {
-    color: #636369 !important;
-  }
-
-  html.theme-light .text-emerald-400,
-  html.theme-light .text-emerald-300 {
-    color: #059669 !important;
-  }
-
-  html.theme-light .border-white\/\[0\.04\],
-  html.theme-light .border-white\/\[0\.05\],
-  html.theme-light .border-white\/\[0\.06\],
-  html.theme-light .border-white\/\[0\.07\],
-  html.theme-light .border-white\/\[0\.08\],
-  html.theme-light .border-white\/\[0\.09\] {
-    border-color: rgba(0, 0, 0, 0.08) !important;
   }
 }
 
@@ -120,12 +87,9 @@
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm bg-zinc-100 hover:bg-white active:scale-[0.98] text-zinc-950 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
-  }
-
-  html.theme-light .btn-primary {
-    background-color: #18181b !important;
-    color: #ffffff !important;
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none hover:opacity-90;
   }
 
   .btn-accent {
@@ -136,7 +100,7 @@
     background-color: var(--bg-subtle);
     border: 1px solid var(--border-subtle);
     color: var(--text-primary);
-    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-full font-medium text-sm active:scale-[0.98] transition-all duration-150;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-full font-medium text-sm active:scale-[0.98] transition-all duration-150 hover:opacity-90;
   }
 
   .input-dark {

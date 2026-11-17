@@ -12,6 +12,7 @@ import ShoppingListTab from './components/ShoppingListTab';
 import CoachChatTab from './components/CoachChatTab';
 
 import {
+  DEFAULT_PROFILE,
   getTodayDateString,
   loadProfile,
   saveProfile,
@@ -49,34 +50,45 @@ import {
   saveCachedFood,
   exportFullBackupData,
   importFullBackupData,
+  clearWorkingStoresOnLock,
 } from './db/database';
 
 import { getFoodById, registerExternalFoods } from './data/foodDatabase';
 import { buildActiveWorkoutExercises } from './data/workoutsData';
+import {
+  inspectPendingSyncHash,
+  saveEncryptedSessionSnapshot,
+} from './utils/cryptoVaultService';
 
 export default function App() {
   const todayStr = getTodayDateString(0);
 
-  // Navigation, Thème (Studio / OLED / Ivoire) & Langue (FR / EN / ES)
   const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState(() => loadTheme());
   const [lang, setLang] = useState(() => loadLanguage());
 
-  // Profil, Cloud Chiffré & Hydratation
-  const [profile, setProfile] = useState(() => loadProfile());
-  const [profileModalOpen, setProfileModalOpen] = useState(
-    () => !loadProfile().onboardingCompleted
+  // Session compte chiffré en mémoire (CryptoKey non-extractible)
+  const [activeAccount, setActiveAccount] = useState(null);
+  const [pendingSyncInfo, setPendingSyncInfo] = useState(() =>
+    typeof window !== 'undefined' ? inspectPendingSyncHash(window.location.hash) : null
   );
-  const [cloudVaultOpen, setCloudVaultOpen] = useState(false);
+
+  const [profile, setProfile] = useState(() => loadProfile());
+  const [profileModalOpen, setProfileModalOpen] = useState(() => {
+    const hasSync =
+      typeof window !== 'undefined' && Boolean(inspectPendingSyncHash(window.location.hash));
+    return !hasSync && !loadProfile().onboardingCompleted;
+  });
+  const [cloudVaultOpen, setCloudVaultOpen] = useState(() =>
+    typeof window !== 'undefined' && Boolean(inspectPendingSyncHash(window.location.hash))
+  );
   const [waterMl, setWaterMl] = useState(() => loadHydrationForDate(todayStr));
 
-  // Session d'entraînement active
   const [activeWorkoutSession, setActiveWorkoutSession] = useState(() =>
     loadActiveWorkoutSession()
   );
   const [workoutPlayerOpen, setWorkoutPlayerOpen] = useState(false);
 
-  // Données IndexedDB
   const [workoutHistory, setWorkoutHistory] = useState([]);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [todayDayLog, setTodayDayLog] = useState(() =>
@@ -91,7 +103,6 @@ export default function App() {
   const [coachMessages, setCoachMessages] = useState([]);
   const [bodyMetrics, setBodyMetrics] = useState([]);
 
-  // Modale universelle d'équivalence nutritionnelle
   const [subModalState, setSubModalState] = useState({
     isOpen: false,
     sourceFoodId: null,
@@ -100,10 +111,8 @@ export default function App() {
     onConfirmSwap: null,
   });
 
-  // PWA Install Prompt
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
 
-  // Application du style visuel sur <html>
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('theme-amoled', 'theme-light', 'dark');
@@ -117,11 +126,29 @@ export default function App() {
     saveTheme(theme);
   }, [theme]);
 
-  // Sauvegarde de la langue
   const handleChangeLang = (nextLang) => {
     setLang(nextLang);
     saveLanguage(nextLang);
   };
+
+  // Remonte proprement en haut de page à chaque changement d'onglet
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
+
+  // Détection automatique si un lien de synchronisation #sync=... est ouvert
+  useEffect(() => {
+    const onHashChange = () => {
+      const info = inspectPendingSyncHash(window.location.hash);
+      if (info) {
+        setPendingSyncInfo(info);
+        setProfileModalOpen(false);
+        setCloudVaultOpen(true);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -132,7 +159,6 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // Chargement complet depuis IndexedDB (y compris aliments Open Food Facts mis en cache)
   const reloadAllFromIndexedDB = useCallback(async () => {
     try {
       const [
@@ -174,6 +200,65 @@ export default function App() {
   useEffect(() => {
     reloadAllFromIndexedDB();
   }, [reloadAllFromIndexedDB]);
+
+  // Sauvegarde automatique chiffrée en AES-256-GCM dès qu'un compte est connecté
+  useEffect(() => {
+    if (!activeAccount?.sessionKey || !activeAccount?.username) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const snapshot = await exportFullBackupData();
+        await saveEncryptedSessionSnapshot(
+          activeAccount.username,
+          activeAccount.sessionKey,
+          activeAccount.saltBase64,
+          snapshot
+        );
+      } catch {
+        // Ignore
+      }
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeAccount,
+    profile,
+    waterMl,
+    workoutHistory,
+    todayDayLog,
+    selectedDayLog,
+    shoppingItems,
+    customRecipes,
+    customWorkouts,
+  ]);
+
+  const handleClearPendingSync = () => {
+    setPendingSyncInfo(null);
+    if (window.location.hash.startsWith('#sync=')) {
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname + window.location.search
+      );
+    }
+  };
+
+  const handleAccountLockedOut = async () => {
+    if (activeAccount?.sessionKey) {
+      const snapshot = await exportFullBackupData();
+      await saveEncryptedSessionSnapshot(
+        activeAccount.username,
+        activeAccount.sessionKey,
+        activeAccount.saltBase64,
+        snapshot
+      );
+    }
+    setActiveAccount(null);
+    await clearWorkingStoresOnLock();
+    setProfile({ ...DEFAULT_PROFILE });
+    setWaterMl(0);
+    setActiveWorkoutSession(null);
+    await reloadAllFromIndexedDB();
+  };
 
   const handleCacheExternalFood = async (foodObj) => {
     if (!foodObj?.id) return;
@@ -218,7 +303,6 @@ export default function App() {
     setWaterMl(clean);
   };
 
-  // Séances d'entraînement
   const handleStartWorkout = (workout, intensityMode = 'normal') => {
     const preparedExercises = buildActiveWorkoutExercises(workout, intensityMode);
     const session = {
@@ -237,10 +321,10 @@ export default function App() {
     setWorkoutPlayerOpen(true);
   };
 
-  const handlePersistActiveSession = (updatedSession) => {
+  const handlePersistActiveSession = useCallback((updatedSession) => {
     setActiveWorkoutSession(updatedSession);
     saveActiveWorkoutSession(updatedSession);
-  };
+  }, []);
 
   const handleCancelWorkoutSession = () => {
     setActiveWorkoutSession(null);
@@ -271,7 +355,6 @@ export default function App() {
     setWorkoutHistory(await getAllWorkoutHistory());
   };
 
-  // Liste de courses
   const mergeItemsIntoShoppingList = async (rawItems = []) => {
     if (!rawItems.length) return 0;
     const currentList = await getShoppingList();
@@ -436,7 +519,6 @@ export default function App() {
     setCoachMessages([]);
   };
 
-  // Export / Import JSON & Cloud Vault Restore
   const handleExportJson = async () => {
     const backup = await exportFullBackupData();
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -474,6 +556,7 @@ export default function App() {
     <div className="min-h-screen app-surface flex flex-col">
       <Header
         profile={profile}
+        activeAccount={activeAccount}
         lang={lang}
         onChangeLang={handleChangeLang}
         onOpenProfile={() => setProfileModalOpen(true)}
@@ -506,6 +589,7 @@ export default function App() {
 
         {activeTab === 'workouts' && (
           <WorkoutsTab
+            lang={lang}
             customWorkouts={customWorkouts}
             workoutHistory={workoutHistory}
             activeWorkoutSession={activeWorkoutSession}
@@ -590,7 +674,12 @@ export default function App() {
 
       <CloudVaultModal
         isOpen={cloudVaultOpen}
+        activeAccount={activeAccount}
+        pendingSyncInfo={pendingSyncInfo}
+        onClearPendingSync={handleClearPendingSync}
         onClose={() => setCloudVaultOpen(false)}
+        onAccountAuthenticated={(acc) => setActiveAccount(acc)}
+        onAccountLockedOut={handleAccountLockedOut}
         onGetFullBackup={exportFullBackupData}
         onRestoreFullBackup={handleImportJson}
       />

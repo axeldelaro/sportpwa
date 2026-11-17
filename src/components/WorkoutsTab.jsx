@@ -11,8 +11,10 @@ import {
   INTENSITY_MODES,
   EXERCISE_CATALOG,
 } from '../data/workoutsData';
+import { tr } from '../i18n/translations';
 
 export default function WorkoutsTab({
+  lang = 'fr',
   customWorkouts = [],
   workoutHistory = [],
   activeWorkoutSession,
@@ -22,7 +24,7 @@ export default function WorkoutsTab({
   onDeleteCustomWorkout,
   onDeleteHistoryEntry,
 }) {
-  const [subView, setSubView] = useState('programs'); // 'programs' | 'custom' | 'history'
+  const [subView, setSubView] = useState('programs');
   const [intensityMode, setIntensityMode] = useState('normal');
   const [expandedProgId, setExpandedProgId] = useState(null);
   const [expandedWorkoutId, setExpandedWorkoutId] = useState(null);
@@ -98,10 +100,12 @@ export default function WorkoutsTab({
   return (
     <div className="space-y-4 pb-8 animate-fade-in">
       {activeWorkoutSession && (
-        <div className="card-surface p-4 flex items-center justify-between gap-3 border-emerald-500/25">
+        <div className="card-surface p-4 flex items-center justify-between gap-3 border-emerald-400/30">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-emerald-400">Session en pause</p>
-            <p className="text-sm font-semibold text-zinc-50 truncate">
+            <p className="text-[11px] font-medium text-emerald-400">
+              {tr(lang, 'session_paused')}
+            </p>
+            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
               {activeWorkoutSession.workoutTitle}
             </p>
           </div>
@@ -111,17 +115,17 @@ export default function WorkoutsTab({
             className="btn-accent !py-2 !px-4 !text-xs shrink-0"
           >
             <Play className="w-3 h-3 fill-current" />
-            Reprendre
+            {tr(lang, 'resume')}
           </button>
         </div>
       )}
 
-      {/* Contrôle segmenté épuré */}
-      <div className="grid grid-cols-3 p-1 rounded-full bg-zinc-900/90 border border-white/[0.06]">
+      {/* Contrôle segmenté adaptatif */}
+      <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
         {[
-          { id: 'programs', label: 'Programmes' },
-          { id: 'custom', label: `Sur-mesure (${customWorkouts.length})` },
-          { id: 'history', label: 'Historique' },
+          { id: 'programs', label: tr(lang, 'tab_programs') },
+          { id: 'custom', label: `${tr(lang, 'tab_custom')} (${customWorkouts.length})` },
+          { id: 'history', label: tr(lang, 'tab_history') },
         ].map((tab) => {
           const active = subView === tab.id;
           return (
@@ -131,8 +135,8 @@ export default function WorkoutsTab({
               onClick={() => setSubView(tab.id)}
               className={`py-2 px-2 rounded-full text-xs font-medium transition-all ${
                 active
-                  ? 'bg-zinc-100 text-zinc-950 font-semibold shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-emerald-400 text-zinc-950 font-semibold shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {tab.label}
@@ -141,11 +145,13 @@ export default function WorkoutsTab({
         })}
       </div>
 
-      {/* Sélecteur d'intensité discret en 1 ligne */}
+      {/* Intensité */}
       {subView !== 'history' && (
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs text-zinc-500">Intensité</span>
-          <div className="inline-flex items-center gap-1 bg-zinc-900/80 p-1 rounded-full border border-white/[0.05]">
+          <span className="text-xs text-[var(--text-muted)]">
+            {tr(lang, 'intensity')}
+          </span>
+          <div className="inline-flex items-center gap-1 bg-[var(--bg-subtle)] p-1 rounded-full border border-[var(--border-subtle)]">
             {INTENSITY_MODES.map((m) => {
               const selected = intensityMode === m.id;
               return (
@@ -156,7 +162,7 @@ export default function WorkoutsTab({
                   className={`px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
                     selected
                       ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                   title={m.description}
                 >
@@ -168,9 +174,7 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* VUE 1 : LES 7 PROGRAMMES UNIVERSELS                        */}
-      {/* ========================================================= */}
+      {/* VUE 1 : LES 7 PROGRAMMES */}
       {subView === 'programs' && (
         <div className="space-y-3">
           {WORKOUT_PROGRAMS.map((prog) => {
@@ -181,10 +185,10 @@ export default function WorkoutsTab({
                 <button
                   type="button"
                   onClick={() => setExpandedProgId(isExpanded ? null : prog.id)}
-                  className="w-full p-5 flex items-center justify-between gap-3 text-left hover:bg-white/[0.02] transition-colors"
+                  className="w-full p-5 flex items-center justify-between gap-3 text-left transition-colors"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                    <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                       <span className="text-emerald-400 font-medium">
                         {prog.category}
                       </span>
@@ -193,34 +197,36 @@ export default function WorkoutsTab({
                       <span>·</span>
                       <span>{prog.workouts.length} séances</span>
                     </div>
-                    <h3 className="text-[15px] font-semibold text-zinc-50 mt-1">
+                    <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mt-1">
                       {prog.title}
                     </h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">{prog.subtitle}</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      {prog.subtitle}
+                    </p>
                   </div>
 
                   <ChevronDown
-                    className={`w-4 h-4 text-zinc-500 shrink-0 transition-transform duration-200 ${
-                      isExpanded ? 'rotate-180 text-zinc-200' : ''
+                    className={`w-4 h-4 text-[var(--text-muted)] shrink-0 transition-transform duration-200 ${
+                      isExpanded ? 'rotate-180 text-[var(--text-primary)]' : ''
                     }`}
                   />
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 space-y-2 border-t border-white/[0.04] pt-3">
+                  <div className="px-4 pb-4 space-y-2 border-t border-[var(--border-subtle)] pt-3">
                     {prog.workouts.map((wk) => {
                       const detailsOpen = expandedWorkoutId === wk.id;
                       return (
                         <div
                           key={wk.id}
-                          className="rounded-2xl bg-zinc-950/70 border border-white/[0.06] p-4 space-y-2.5"
+                          className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-4 space-y-2.5"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                              <h4 className="text-sm font-semibold text-zinc-100">
+                              <h4 className="text-sm font-semibold text-[var(--text-primary)]">
                                 {wk.title}
                               </h4>
-                              <p className="text-xs text-zinc-500 mt-0.5">
+                              <p className="text-xs text-[var(--text-muted)] mt-0.5">
                                 {wk.durationMin} min · {wk.exercises.length} exercices
                               </p>
                             </div>
@@ -236,12 +242,12 @@ export default function WorkoutsTab({
                               className="btn-primary !py-2 !px-4 !text-xs shrink-0"
                             >
                               <Play className="w-3 h-3 fill-current" />
-                              Démarrer
+                              {tr(lang, 'start')}
                             </button>
                           </div>
 
                           <div className="flex items-center justify-between pt-0.5">
-                            <p className="text-[11px] text-zinc-500 truncate">
+                            <p className="text-[11px] text-[var(--text-muted)] truncate">
                               {wk.targetMuscles.join(' · ')}
                             </p>
                             <button
@@ -249,24 +255,26 @@ export default function WorkoutsTab({
                               onClick={() =>
                                 setExpandedWorkoutId(detailsOpen ? null : wk.id)
                               }
-                              className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 shrink-0 ml-3"
+                              className="text-[11px] font-medium text-[var(--text-secondary)] underline shrink-0 ml-3"
                             >
-                              {detailsOpen ? 'Masquer' : 'Aperçu'}
+                              {detailsOpen ? tr(lang, 'hide') : tr(lang, 'preview')}
                             </button>
                           </div>
 
                           {detailsOpen && (
-                            <div className="pt-2.5 border-t border-white/[0.05] space-y-1.5">
+                            <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-1.5">
                               {wk.exercises.map((ex, idx) => (
                                 <div
                                   key={ex.id}
                                   className="py-1.5 flex items-center justify-between gap-3 text-xs"
                                 >
-                                  <span className="text-zinc-300 truncate">
-                                    <span className="text-zinc-500 mr-1.5">{idx + 1}.</span>
+                                  <span className="text-[var(--text-primary)] truncate">
+                                    <span className="text-[var(--text-muted)] mr-1.5">
+                                      {idx + 1}.
+                                    </span>
                                     {ex.name}
                                   </span>
-                                  <span className="shrink-0 text-zinc-400 tabular-nums font-medium">
+                                  <span className="shrink-0 text-[var(--text-secondary)] tabular-nums font-medium">
                                     {ex.sets} ×{' '}
                                     {ex.type === 'timed'
                                       ? `${ex.durationSeconds}s`
@@ -287,9 +295,7 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* VUE 2 : SÉANCES SUR-MESURE                                 */}
-      {/* ========================================================= */}
+      {/* VUE 2 : SÉANCES SUR-MESURE */}
       {subView === 'custom' && (
         <div className="space-y-4">
           <button
@@ -308,7 +314,9 @@ export default function WorkoutsTab({
             >
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs text-zinc-400 mb-1">Nom</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">
+                    Nom
+                  </label>
                   <input
                     type="text"
                     required
@@ -319,7 +327,9 @@ export default function WorkoutsTab({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Minutes</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">
+                    Minutes
+                  </label>
                   <input
                     type="number"
                     min="10"
@@ -332,7 +342,7 @@ export default function WorkoutsTab({
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-400 mb-1">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
                   Choisir dans le catalogue ({EXERCISE_CATALOG.length} exercices)
                 </label>
                 <select
@@ -348,15 +358,15 @@ export default function WorkoutsTab({
                     Sélectionner un exercice...
                   </option>
                   {EXERCISE_CATALOG.map((ex) => (
-                    <option key={ex.id} value={ex.id} className="bg-zinc-900">
+                    <option key={ex.id} value={ex.id} className="bg-zinc-900 text-white">
                       {ex.name} — {ex.muscle}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-zinc-950/70 border border-white/[0.06] space-y-2.5">
-                <p className="text-xs font-medium text-zinc-400">
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2.5">
+                <p className="text-xs font-medium text-[var(--text-secondary)]">
                   Ou créer un exercice libre
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -372,10 +382,10 @@ export default function WorkoutsTab({
                     onChange={(e) => setNewExForm({ ...newExForm, type: e.target.value })}
                     className="input-dark !py-2 text-xs"
                   >
-                    <option value="reps" className="bg-zinc-900">
+                    <option value="reps" className="bg-zinc-900 text-white">
                       Répétitions
                     </option>
-                    <option value="timed" className="bg-zinc-900">
+                    <option value="timed" className="bg-zinc-900 text-white">
                       Chronométré (sec)
                     </option>
                   </select>
@@ -446,9 +456,9 @@ export default function WorkoutsTab({
                   {customExercises.map((ex, i) => (
                     <div
                       key={ex.id}
-                      className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-zinc-900 border border-white/[0.06] text-xs"
+                      className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-[var(--bg-subtle)] text-xs"
                     >
-                      <span className="text-zinc-200 truncate">
+                      <span className="text-[var(--text-primary)] truncate">
                         {i + 1}. {ex.name} ({ex.sets} ×{' '}
                         {ex.type === 'timed' ? `${ex.durationSeconds}s` : ex.targetReps})
                       </span>
@@ -457,7 +467,7 @@ export default function WorkoutsTab({
                         onClick={() =>
                           setCustomExercises((prev) => prev.filter((item) => item.id !== ex.id))
                         }
-                        className="text-zinc-500 hover:text-rose-400 p-1"
+                        className="text-[var(--text-muted)] hover:text-rose-400 p-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -479,11 +489,11 @@ export default function WorkoutsTab({
 
           {customWorkouts.length === 0 ? (
             <div className="card-surface p-8 text-center">
-              <p className="text-sm font-medium text-zinc-300">
+              <p className="text-sm font-medium text-[var(--text-secondary)]">
                 Aucune séance sur-mesure
               </p>
-              <p className="text-xs text-zinc-500 mt-1">
-                Crée tes propres routines à partir de plus de {EXERCISE_CATALOG.length} exercices.
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Crée tes propres routines à partir de {EXERCISE_CATALOG.length} exercices.
               </p>
             </div>
           ) : (
@@ -494,10 +504,10 @@ export default function WorkoutsTab({
                   className="card-surface p-4 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-zinc-100 truncate">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate">
                       {wk.title}
                     </h4>
-                    <p className="text-xs text-zinc-500 mt-0.5">
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
                       {wk.exercises?.length || 0} exercices · {wk.durationMin} min
                     </p>
                   </div>
@@ -505,7 +515,7 @@ export default function WorkoutsTab({
                     <button
                       type="button"
                       onClick={() => onDeleteCustomWorkout(wk.id)}
-                      className="p-2 rounded-full text-zinc-500 hover:text-rose-400 transition-colors"
+                      className="p-2 rounded-full text-[var(--text-muted)] hover:text-rose-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -515,7 +525,7 @@ export default function WorkoutsTab({
                       className="btn-primary !py-2 !px-4 !text-xs"
                     >
                       <Play className="w-3 h-3 fill-current" />
-                      Démarrer
+                      {tr(lang, 'start')}
                     </button>
                   </div>
                 </div>
@@ -525,18 +535,18 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* VUE 3 : HISTORIQUE & ESTIMATEUR 1RM                        */}
-      {/* ========================================================= */}
+      {/* VUE 3 : HISTORIQUE & 1RM */}
       {subView === 'history' && (
         <div className="space-y-4">
           <div className="card-surface p-5 space-y-3.5">
-            <span className="text-xs font-medium text-zinc-400">
-              Estimateur 1RM (Force max)
+            <span className="text-xs font-medium text-[var(--text-secondary)]">
+              Estimateur 1RM (Formule d’Epley)
             </span>
             <div className="grid grid-cols-3 gap-2.5 items-end">
               <div>
-                <label className="block text-[11px] text-zinc-500 mb-1">Charge (kg)</label>
+                <label className="block text-[11px] text-[var(--text-muted)] mb-1">
+                  Charge (kg)
+                </label>
                 <input
                   type="number"
                   min="1"
@@ -547,7 +557,9 @@ export default function WorkoutsTab({
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-zinc-500 mb-1">Reps</label>
+                <label className="block text-[11px] text-[var(--text-muted)] mb-1">
+                  Reps
+                </label>
                 <input
                   type="number"
                   min="1"
@@ -557,8 +569,8 @@ export default function WorkoutsTab({
                   className="input-dark !py-2 tabular-nums"
                 />
               </div>
-              <div className="bg-zinc-950/80 border border-white/[0.08] rounded-2xl p-2 text-center">
-                <span className="block text-[10px] text-zinc-500">1RM</span>
+              <div className="bg-[var(--bg-subtle)] rounded-2xl p-2 text-center">
+                <span className="block text-[10px] text-[var(--text-muted)]">1RM</span>
                 <span className="text-base font-bold text-emerald-400 tabular-nums">
                   {estimated1RM} kg
                 </span>
@@ -568,8 +580,10 @@ export default function WorkoutsTab({
 
           {workoutHistory.length === 0 ? (
             <div className="card-surface p-8 text-center">
-              <p className="text-sm font-medium text-zinc-300">Historique vide</p>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-sm font-medium text-[var(--text-secondary)]">
+                Historique vide
+              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
                 Tes séances validées apparaîtront ici.
               </p>
             </div>
@@ -581,13 +595,13 @@ export default function WorkoutsTab({
                   className="card-surface p-4 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-[11px] text-[var(--text-muted)]">
                       {item.date} · {Math.max(1, Math.round((item.durationSec || 60) / 60))} min
                     </p>
-                    <h4 className="text-sm font-semibold text-zinc-100 truncate mt-0.5">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate mt-0.5">
                       {item.title}
                     </h4>
-                    <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5 tabular-nums">
                       {item.completedSets} séries
                       {item.totalVolumeKg > 0
                         ? ` · ${item.totalVolumeKg.toLocaleString('fr-FR')} kg soulevés`
@@ -598,7 +612,7 @@ export default function WorkoutsTab({
                   <button
                     type="button"
                     onClick={() => onDeleteHistoryEntry(item.id)}
-                    className="p-2 rounded-full text-zinc-500 hover:text-rose-400 shrink-0"
+                    className="p-2 rounded-full text-[var(--text-muted)] hover:text-rose-400 shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

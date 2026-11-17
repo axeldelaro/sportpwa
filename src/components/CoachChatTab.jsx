@@ -69,7 +69,7 @@ export default function CoachChatTab({
   const [dynamicSuggestions, setDynamicSuggestions] = useState(
     QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr
   );
-  const bottomRef = useRef(null);
+  const chatScrollRef = useRef(null);
 
   useEffect(() => {
     setDynamicSuggestions(
@@ -83,7 +83,10 @@ export default function CoachChatTab({
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = chatScrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
   }, [messages, isTyping, streamingText]);
 
   const handleToggleNeural = () => {
@@ -176,7 +179,7 @@ export default function CoachChatTab({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8.8rem)] max-h-[760px] animate-fade-in">
+    <div className="flex flex-col h-[calc(100dvh-9.8rem)] max-h-[760px] animate-fade-in">
       {/* Barre supérieure : Sélecteur RAG Instantané vs LLM Neural Embarqué */}
       <div className="flex items-center justify-between gap-2 px-1 pb-3 shrink-0">
         <div className="flex items-center gap-2">
@@ -241,7 +244,7 @@ export default function CoachChatTab({
       )}
 
       {/* Fil de discussion */}
-      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 pb-2">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-3.5 pr-1 pb-2">
         <div className="max-w-[90%] rounded-3xl rounded-tl-md card-surface px-4 py-3.5 text-xs text-[var(--text-secondary)] leading-relaxed">
           {lang === 'en' ? (
             <>
@@ -288,11 +291,11 @@ export default function CoachChatTab({
                       href={src.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[10.5px] text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
                       title={src.localizedSummary}
                     >
-                      <BookOpen className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                      <span className="truncate max-w-[190px]">{src.citation}</span>
+                      <BookOpen className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>{src.citation}</span>
                       <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                     </a>
                   ))}
@@ -323,7 +326,6 @@ export default function CoachChatTab({
           </div>
         )}
 
-        <div ref={bottomRef} />
       </div>
 
       {/* Suggestions & Barre d'envoi */}

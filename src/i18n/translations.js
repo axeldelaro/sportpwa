@@ -65,7 +65,7 @@ export const UI_TRANSLATIONS = {
     placeholder_coach: 'Pose une question sport, nutrition ou étude scientifique...',
     sources_cited: 'Études & Consensus cités',
 
-    vault_title: 'Compte & Cloud Chiffré (GitHub)',
+    vault_title: 'Compte & Mot de passe',
     theme_graphite: 'Studio Sombre',
     theme_oled: 'Noir OLED',
     theme_light: 'Clair Ivoire',
@@ -134,7 +134,7 @@ export const UI_TRANSLATIONS = {
     placeholder_coach: 'Ask about training, macros, swaps, or peer-reviewed studies...',
     sources_cited: 'Peer-reviewed Sources',
 
-    vault_title: 'Account & Encrypted Cloud (GitHub)',
+    vault_title: 'Account & Password',
     theme_graphite: 'Dark Studio',
     theme_oled: 'Pure OLED',
     theme_light: 'Daylight Ivory',
@@ -203,7 +203,7 @@ export const UI_TRANSLATIONS = {
     placeholder_coach: 'Pregunta sobre entreno, macros, equivalencias o estudios...',
     sources_cited: 'Estudios científicos citados',
 
-    vault_title: 'Cuenta y Nube Cifrada (GitHub)',
+    vault_title: 'Cuenta y Contraseña',
     theme_graphite: 'Estudio Oscuro',
     theme_oled: 'Negro OLED',
     theme_light: 'Marfil Claro',
