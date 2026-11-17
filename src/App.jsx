@@ -1,0 +1,605 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Header from './components/Header';
+import BottomNav from './components/BottomNav';
+import ProfileModal from './components/ProfileModal';
+import SubstitutionModal from './components/SubstitutionModal';
+import DashboardTab from './components/DashboardTab';
+import WorkoutsTab from './components/WorkoutsTab';
+import ActiveWorkoutPlayer from './components/ActiveWorkoutPlayer';
+import NutritionTab, { computeDayTotals } from './components/NutritionTab';
+import ShoppingListTab from './components/ShoppingListTab';
+import CoachChatTab from './components/CoachChatTab';
+
+import {
+  getTodayDateString,
+  loadProfile,
+  saveProfile,
+  loadHydrationForDate,
+  saveHydrationForDate,
+  loadTheme,
+  saveTheme,
+  loadActiveWorkoutSession,
+  saveActiveWorkoutSession,
+  getAllWorkoutHistory,
+  addWorkoutHistoryEntry,
+  deleteWorkoutHistoryEntry,
+  getNutritionLogByDate,
+  getAllNutritionLogs,
+  saveNutritionLog,
+  createEmptyDayNutrition,
+  getShoppingList,
+  saveShoppingItem,
+  replaceAllShoppingItems,
+  deleteShoppingItem,
+  getCustomRecipes,
+  saveCustomRecipe,
+  deleteCustomRecipe,
+  getCustomWorkouts,
+  saveCustomWorkout,
+  deleteCustomWorkout,
+  getCoachMessages,
+  addCoachMessage,
+  clearCoachMessages,
+  getBodyMetricsHistory,
+  saveBodyMetricEntry,
+  exportFullBackupData,
+  importFullBackupData,
+} from './db/database';
+
+import { getFoodById } from './data/foodDatabase';
+import { buildActiveWorkoutExercises } from './data/workoutsData';
+
+export default function App() {
+  const todayStr = getTodayDateString(0);
+
+  // Navigation & Thème
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [theme, setTheme] = useState(() => loadTheme());
+
+  // Profil & Hydratation (localStorage immédiat)
+  const [profile, setProfile] = useState(() => loadProfile());
+  const [profileModalOpen, setProfileModalOpen] = useState(
+    () => !loadProfile().onboardingCompleted
+  );
+  const [waterMl, setWaterMl] = useState(() => loadHydrationForDate(todayStr));
+
+  // Session d'entraînement active (anti-perte localStorage)
+  const [activeWorkoutSession, setActiveWorkoutSession] = useState(() =>
+    loadActiveWorkoutSession()
+  );
+  const [workoutPlayerOpen, setWorkoutPlayerOpen] = useState(false);
+
+  // Données IndexedDB
+  const [workoutHistory, setWorkoutHistory] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [todayDayLog, setTodayDayLog] = useState(() =>
+    createEmptyDayNutrition(todayStr)
+  );
+  const [selectedDayLog, setSelectedDayLog] = useState(() =>
+    createEmptyDayNutrition(todayStr)
+  );
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [customRecipes, setCustomRecipes] = useState([]);
+  const [customWorkouts, setCustomWorkouts] = useState([]);
+  const [coachMessages, setCoachMessages] = useState([]);
+  const [bodyMetrics, setBodyMetrics] = useState([]);
+
+  // Modale universelle d'équivalence nutritionnelle
+  const [subModalState, setSubModalState] = useState({
+    isOpen: false,
+    sourceFoodId: null,
+    initialGrams: 100,
+    contextLabel: '',
+    onConfirmSwap: null,
+  });
+
+  // PWA Install Prompt
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+
+  // Application du thème sur <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'amoled') {
+      root.classList.add('theme-amoled');
+    } else {
+      root.classList.remove('theme-amoled');
+    }
+    saveTheme(theme);
+  }, [theme]);
+
+  // Capture de l'événement PWA beforeinstallprompt
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPromptEvent(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Chargement initial complet depuis IndexedDB
+  const reloadAllFromIndexedDB = useCallback(async () => {
+    try {
+      const [
+        wkHist,
+        tLog,
+        selLog,
+        shop,
+        cRecs,
+        cWks,
+        cMsgs,
+        metrics,
+      ] = await Promise.all([
+        getAllWorkoutHistory(),
+        getNutritionLogByDate(todayStr),
+        getNutritionLogByDate(selectedDate),
+        getShoppingList(),
+        getCustomRecipes(),
+        getCustomWorkouts(),
+        getCoachMessages(),
+        getBodyMetricsHistory(),
+      ]);
+
+      setWorkoutHistory(wkHist);
+      setTodayDayLog(tLog);
+      setSelectedDayLog(selLog);
+      setShoppingItems(shop);
+      setCustomRecipes(cRecs);
+      setCustomWorkouts(cWks);
+      setCoachMessages(cMsgs);
+      setBodyMetrics(metrics);
+    } catch (err) {
+      console.error('Erreur chargement IndexedDB :', err);
+    }
+  }, [todayStr, selectedDate]);
+
+  useEffect(() => {
+    reloadAllFromIndexedDB();
+  }, [reloadAllFromIndexedDB]);
+
+  // Changement de date dans l'onglet Nutrition
+  const handleChangeSelectedDate = async (nextDate) => {
+    setSelectedDate(nextDate);
+    const log = await getNutritionLogByDate(nextDate);
+    setSelectedDayLog(log);
+  };
+
+  // Sauvegarde d'un journal nutritionnel quotidien
+  const handleSaveDayLog = async (updatedLog) => {
+    const saved = await saveNutritionLog(updatedLog);
+    setSelectedDayLog(saved);
+    if (saved.date === todayStr) {
+      setTodayDayLog(saved);
+    }
+  };
+
+  const todayMacros = useMemo(() => computeDayTotals(todayDayLog), [todayDayLog]);
+
+  // Sauvegarde du profil + suivi du poids
+  const handleSaveProfile = async (nextProfile) => {
+    const saved = saveProfile(nextProfile);
+    setProfile(saved);
+    if (saved.weight) {
+      await saveBodyMetricEntry({ date: todayStr, weightKg: saved.weight });
+      const metrics = await getBodyMetricsHistory();
+      setBodyMetrics(metrics);
+    }
+  };
+
+  const handleLogWeightQuick = async (weightVal) => {
+    const updatedProf = saveProfile({ ...profile, weight: weightVal });
+    setProfile(updatedProf);
+    await saveBodyMetricEntry({ date: todayStr, weightKg: weightVal });
+    const metrics = await getBodyMetricsHistory();
+    setBodyMetrics(metrics);
+  };
+
+  // Hydratation
+  const handleUpdateWater = (nextMl) => {
+    const clean = saveHydrationForDate(todayStr, nextMl);
+    setWaterMl(clean);
+  };
+
+  // =========================================================================
+  // GESTION DES SÉANCES D'ENTRAÎNEMENT ACTIVES & HISTORIQUE
+  // =========================================================================
+  const handleStartWorkout = (workout, intensityMode = 'normal') => {
+    const preparedExercises = buildActiveWorkoutExercises(workout, intensityMode);
+    const session = {
+      sessionId: `sess_${Date.now()}`,
+      programId: workout.programId || 'custom',
+      workoutId: workout.id,
+      workoutTitle: workout.title,
+      intensityMode,
+      exercises: preparedExercises,
+      currentExIdx: 0,
+      elapsedSec: 0,
+      startedAt: new Date().toISOString(),
+    };
+    setActiveWorkoutSession(session);
+    saveActiveWorkoutSession(session);
+    setWorkoutPlayerOpen(true);
+  };
+
+  const handlePersistActiveSession = (updatedSession) => {
+    setActiveWorkoutSession(updatedSession);
+    saveActiveWorkoutSession(updatedSession);
+  };
+
+  const handleCancelWorkoutSession = () => {
+    setActiveWorkoutSession(null);
+    saveActiveWorkoutSession(null);
+    setWorkoutPlayerOpen(false);
+  };
+
+  const handleCompleteWorkout = async (summaryRecord) => {
+    await addWorkoutHistoryEntry(summaryRecord);
+    setActiveWorkoutSession(null);
+    saveActiveWorkoutSession(null);
+    setWorkoutPlayerOpen(false);
+    const refreshed = await getAllWorkoutHistory();
+    setWorkoutHistory(refreshed);
+  };
+
+  const handleCreateCustomWorkout = async (wkPayload) => {
+    await saveCustomWorkout(wkPayload);
+    setCustomWorkouts(await getCustomWorkouts());
+  };
+
+  const handleDeleteCustomWorkout = async (id) => {
+    await deleteCustomWorkout(id);
+    setCustomWorkouts(await getCustomWorkouts());
+  };
+
+  const handleDeleteWorkoutHistory = async (id) => {
+    await deleteWorkoutHistoryEntry(id);
+    setWorkoutHistory(await getAllWorkoutHistory());
+  };
+
+  // =========================================================================
+  // GESTION DE LA LISTE DE COURSES INTELLIGENTE & AGRÉGATION
+  // =========================================================================
+  const mergeItemsIntoShoppingList = async (rawItems = []) => {
+    if (!rawItems.length) return 0;
+    const currentList = await getShoppingList();
+    const updatedList = [...currentList];
+    let touchedCount = 0;
+
+    rawItems.forEach(({ foodId, grams }) => {
+      const food = getFoodById(foodId);
+      if (!food) return;
+      const g = Math.max(5, Math.round(Number(grams) || food.defaultGrams || 100));
+      const existingIdx = updatedList.findIndex(
+        (item) => item.foodId === food.id && !item.checked
+      );
+
+      if (existingIdx >= 0) {
+        updatedList[existingIdx] = {
+          ...updatedList[existingIdx],
+          grams: updatedList[existingIdx].grams + g,
+        };
+      } else {
+        updatedList.push({
+          id: `shop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          foodId: food.id,
+          category: food.category,
+          grams: g,
+          state: food.state,
+          checked: false,
+          isCustom: false,
+          addedAt: Date.now() + touchedCount,
+        });
+      }
+      touchedCount += 1;
+    });
+
+    await replaceAllShoppingItems(updatedList);
+    setShoppingItems(await getShoppingList());
+    return touchedCount;
+  };
+
+  const handleGenerateShoppingFromToday = async () => {
+    const tLog = await getNutritionLogByDate(todayStr);
+    const items = Object.values(tLog.meals || {})
+      .flat()
+      .flatMap((e) => e.items || []);
+    return mergeItemsIntoShoppingList(items);
+  };
+
+  const handleGenerateShoppingFromWeek = async () => {
+    const allLogs = await getAllNutritionLogs();
+    const validDates = new Set();
+    for (let offset = 0; offset < 7; offset++) {
+      validDates.add(getTodayDateString(offset));
+    }
+    const weekItems = allLogs
+      .filter((log) => validDates.has(log.date))
+      .flatMap((log) =>
+        Object.values(log.meals || {})
+          .flat()
+          .flatMap((e) => e.items || [])
+      );
+    return mergeItemsIntoShoppingList(weekItems);
+  };
+
+  const handleAddFoodToShopping = async (foodId, grams) => {
+    await mergeItemsIntoShoppingList([{ foodId, grams }]);
+  };
+
+  const handleAddCustomTextShopping = async (customName, category) => {
+    await saveShoppingItem({
+      customName,
+      category,
+      checked: false,
+      isCustom: true,
+    });
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleToggleShoppingChecked = async (id) => {
+    const target = shoppingItems.find((i) => i.id === id);
+    if (!target) return;
+    await saveShoppingItem({ ...target, checked: !target.checked });
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleUpdateShoppingGrams = async (id, grams) => {
+    const target = shoppingItems.find((i) => i.id === id);
+    if (!target) return;
+    const safeG = Math.max(5, Math.round(Number(grams) || 5));
+    await saveShoppingItem({ ...target, grams: safeG });
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleSwapShoppingItem = async (itemId, newFoodId, newGrams) => {
+    const newFood = getFoodById(newFoodId);
+    if (!newFood) return;
+
+    const currentList = await getShoppingList();
+    const otherSameFoodIdx = currentList.findIndex(
+      (i) => i.id !== itemId && i.foodId === newFoodId && !i.checked
+    );
+
+    let nextList;
+    if (otherSameFoodIdx >= 0) {
+      // Fusionne intelligemment si le nouvel aliment est déjà dans la liste !
+      nextList = currentList
+        .filter((i) => i.id !== itemId)
+        .map((i, idx) =>
+          idx === otherSameFoodIdx ? { ...i, grams: i.grams + newGrams } : i
+        );
+    } else {
+      nextList = currentList.map((i) =>
+        i.id === itemId
+          ? {
+              ...i,
+              foodId: newFood.id,
+              category: newFood.category,
+              state: newFood.state,
+              grams: newGrams,
+              isCustom: false,
+            }
+          : i
+      );
+    }
+
+    await replaceAllShoppingItems(nextList);
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleDeleteShoppingItem = async (id) => {
+    await deleteShoppingItem(id);
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleClearCheckedShopping = async () => {
+    const remaining = shoppingItems.filter((i) => !i.checked);
+    await replaceAllShoppingItems(remaining);
+    setShoppingItems(await getShoppingList());
+  };
+
+  const handleClearAllShopping = async () => {
+    await replaceAllShoppingItems([]);
+    setShoppingItems([]);
+  };
+
+  // =========================================================================
+  // RECETTES PERSONNALISÉES & CHAT COACH
+  // =========================================================================
+  const handleSaveCustomRecipe = async (rec) => {
+    const saved = await saveCustomRecipe(rec);
+    setCustomRecipes(await getCustomRecipes());
+    return saved;
+  };
+
+  const handleDeleteCustomRecipe = async (id) => {
+    await deleteCustomRecipe(id);
+    setCustomRecipes(await getCustomRecipes());
+  };
+
+  const handleAppendCoachMessage = async (msg) => {
+    await addCoachMessage(msg);
+    setCoachMessages(await getCoachMessages());
+  };
+
+  const handleClearCoachHistory = async () => {
+    await clearCoachMessages();
+    setCoachMessages([]);
+  };
+
+  // =========================================================================
+  // EXPORT / IMPORT SAUVEGARDE JSON PORTABLE
+  // =========================================================================
+  const handleExportJson = async () => {
+    const backup = await exportFullBackupData();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pulsefit-sauvegarde-${todayStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJson = async (parsedData) => {
+    await importFullBackupData(parsedData);
+    setProfile(loadProfile());
+    setTheme(loadTheme());
+    setWaterMl(loadHydrationForDate(todayStr));
+    await reloadAllFromIndexedDB();
+  };
+
+  const handleTriggerPwaInstall = async () => {
+    if (!installPromptEvent) return;
+    installPromptEvent.prompt();
+    await installPromptEvent.userChoice;
+    setInstallPromptEvent(null);
+  };
+
+  const uncheckedShoppingCount = shoppingItems.filter((i) => !i.checked).length;
+
+  return (
+    <div className="min-h-screen app-surface bg-zinc-950 text-zinc-100 flex flex-col">
+      {/* Header Contextuel Fixe */}
+      <Header
+        profile={profile}
+        onOpenProfile={() => setProfileModalOpen(true)}
+        onExportJson={handleExportJson}
+        onImportJson={handleImportJson}
+        theme={theme}
+        onToggleTheme={() =>
+          setTheme((prev) => (prev === 'amoled' ? 'dark' : 'amoled'))
+        }
+        installPromptEvent={installPromptEvent}
+        onTriggerInstall={handleTriggerPwaInstall}
+      />
+
+      {/* Contenu Principal de l'Onglet Actif */}
+      <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-4 pb-24">
+        {activeTab === 'dashboard' && (
+          <DashboardTab
+            profile={profile}
+            todayMacros={todayMacros}
+            waterMl={waterMl}
+            onUpdateWater={handleUpdateWater}
+            workoutHistory={workoutHistory}
+            activeWorkoutSession={activeWorkoutSession}
+            onStartWorkout={handleStartWorkout}
+            onResumeWorkout={() => setWorkoutPlayerOpen(true)}
+            onNavigateTab={setActiveTab}
+            bodyMetrics={bodyMetrics}
+            onLogWeight={handleLogWeightQuick}
+          />
+        )}
+
+        {activeTab === 'workouts' && (
+          <WorkoutsTab
+            customWorkouts={customWorkouts}
+            workoutHistory={workoutHistory}
+            activeWorkoutSession={activeWorkoutSession}
+            onStartWorkout={handleStartWorkout}
+            onResumeWorkout={() => setWorkoutPlayerOpen(true)}
+            onCreateCustomWorkout={handleCreateCustomWorkout}
+            onDeleteCustomWorkout={handleDeleteCustomWorkout}
+            onDeleteHistoryEntry={handleDeleteWorkoutHistory}
+          />
+        )}
+
+        {activeTab === 'nutrition' && (
+          <NutritionTab
+            selectedDate={selectedDate}
+            onChangeDate={handleChangeSelectedDate}
+            dayLog={selectedDayLog}
+            onSaveDayLog={handleSaveDayLog}
+            profile={profile}
+            customRecipes={customRecipes}
+            onSaveCustomRecipe={handleSaveCustomRecipe}
+            onDeleteCustomRecipe={handleDeleteCustomRecipe}
+            onSendItemsToShoppingList={mergeItemsIntoShoppingList}
+            onOpenSubstitutionModal={(cfg) =>
+              setSubModalState({ ...cfg, isOpen: true })
+            }
+          />
+        )}
+
+        {activeTab === 'shopping' && (
+          <ShoppingListTab
+            shoppingItems={shoppingItems}
+            profile={profile}
+            onToggleItemChecked={handleToggleShoppingChecked}
+            onUpdateItemGrams={handleUpdateShoppingGrams}
+            onDeleteItem={handleDeleteShoppingItem}
+            onClearCheckedItems={handleClearCheckedShopping}
+            onClearAllItems={handleClearAllShopping}
+            onAddFoodItem={handleAddFoodToShopping}
+            onAddCustomTextItem={handleAddCustomTextShopping}
+            onSwapShoppingItem={handleSwapShoppingItem}
+            onGenerateFromToday={handleGenerateShoppingFromToday}
+            onGenerateFromWeek={handleGenerateShoppingFromWeek}
+            onOpenSubstitutionModal={(cfg) =>
+              setSubModalState({ ...cfg, isOpen: true })
+            }
+          />
+        )}
+
+        {activeTab === 'coach' && (
+          <CoachChatTab
+            profile={profile}
+            todayMacros={todayMacros}
+            waterMl={waterMl}
+            workoutHistory={workoutHistory}
+            messages={coachMessages}
+            onAppendMessage={handleAppendCoachMessage}
+            onClearHistory={handleClearCoachHistory}
+          />
+        )}
+      </main>
+
+      {/* Barre de Navigation Inférieure Fixe à 5 Onglets */}
+      <BottomNav
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        uncheckedShoppingCount={uncheckedShoppingCount}
+        hasActiveWorkout={Boolean(activeWorkoutSession)}
+      />
+
+      {/* Modale Profil Universel & Onboarding */}
+      <ProfileModal
+        isOpen={profileModalOpen}
+        profile={profile}
+        onClose={() => setProfileModalOpen(false)}
+        onSaveProfile={handleSaveProfile}
+      />
+
+      {/* Modale Interactive d'Équivalence Nutritionnelle */}
+      <SubstitutionModal
+        isOpen={subModalState.isOpen}
+        sourceFoodId={subModalState.sourceFoodId}
+        initialGrams={subModalState.initialGrams}
+        contextLabel={subModalState.contextLabel}
+        profile={profile}
+        onClose={() => setSubModalState((prev) => ({ ...prev, isOpen: false }))}
+        onConfirmSwap={(swapResult) => {
+          if (typeof subModalState.onConfirmSwap === 'function') {
+            subModalState.onConfirmSwap(swapResult);
+          }
+        }}
+      />
+
+      {/* Lecteur Plein Écran de Séance Active */}
+      {workoutPlayerOpen && activeWorkoutSession && (
+        <ActiveWorkoutPlayer
+          session={activeWorkoutSession}
+          onPersistSession={handlePersistActiveSession}
+          onMinimize={() => setWorkoutPlayerOpen(false)}
+          onCancelSession={handleCancelWorkoutSession}
+          onCompleteWorkout={handleCompleteWorkout}
+        />
+      )}
+    </div>
+  );
+}

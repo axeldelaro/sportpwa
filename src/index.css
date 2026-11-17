@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #09090b;
+    color: #f4f4f5;
+    -webkit-tap-highlight-color: transparent;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  html.theme-amoled,
+  html.theme-amoled body {
+    background-color: #000000;
+  }
+
+  html.theme-amoled .app-surface {
+    background-color: #000000;
+  }
+
+  html.theme-amoled .card-surface {
+    background-color: #0a0a0c;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+@layer components {
+  .card-surface {
+    @apply bg-zinc-900/55 border border-white/[0.06] rounded-3xl backdrop-blur-md;
+  }
+
+  .card-elevated {
+    @apply bg-zinc-900 border border-white/[0.09] rounded-3xl shadow-2xl shadow-black/60;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm bg-zinc-100 hover:bg-white active:scale-[0.98] text-zinc-950 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm bg-emerald-400 hover:bg-emerald-300 active:scale-[0.98] text-zinc-950 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-full font-medium text-sm bg-zinc-800/70 hover:bg-zinc-800 active:scale-[0.98] text-zinc-200 border border-white/[0.06] transition-all duration-150;
+  }
+
+  .input-dark {
+    @apply w-full bg-zinc-950/80 border border-white/[0.08] rounded-2xl px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-white/25 transition-colors;
+  }
+}
+
+.pb-safe {
+  padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
+}
+
+.pt-safe {
+  padding-top: max(0.35rem, env(safe-area-inset-top));
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.18);
+  border-radius: 9999px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

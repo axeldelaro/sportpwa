@@ -1,0 +1,27 @@
+{
+  "name": "PulseFit",
+  "short_name": "PulseFit",
+  "description": "Coaching sportif, nutrition et liste de courses intelligente 100% hors-ligne.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "lang": "fr-FR",
+  "categories": ["fitness", "health", "food"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
