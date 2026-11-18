@@ -21,6 +21,8 @@ import {
 } from '../data/workoutsData';
 import { normalizeText } from '../utils/substitutionEngine';
 import { tr } from '../i18n/translations';
+import ExerciseMotionVisual from './ExerciseMotionVisual';
+import ExerciseDetailModal from './ExerciseDetailModal';
 
 const EQUIPMENT_LABEL_MAP = Object.fromEntries(
   EQUIPMENT_OPTIONS.map((eq) => [eq.id, eq.label])
@@ -48,6 +50,7 @@ export default function WorkoutsTab({
 
   const [expandedProgId, setExpandedProgId] = useState(null);
   const [expandedWorkoutId, setExpandedWorkoutId] = useState(null);
+  const [inspectedExercise, setInspectedExercise] = useState(null);
 
   // Sélection rapide d'exercices au pouce depuis l'onglet "Exercices"
   const [quickPickIds, setQuickPickIds] = useState([]);
@@ -467,27 +470,30 @@ export default function WorkoutsTab({
                             </div>
 
                             {detailsOpen && (
-                              <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-1.5">
+                              <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2">
                                 {wk.exercises.map((ex, idx) => (
                                   <div
                                     key={ex.id}
-                                    className="py-1 flex items-center justify-between gap-3 text-xs"
+                                    onClick={() => setInspectedExercise(ex)}
+                                    className="py-1.5 px-2 rounded-xl hover:bg-[var(--bg-app)]/60 flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors"
                                   >
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-[var(--text-primary)] truncate">
-                                        <span className="text-[var(--text-muted)] mr-1.5">
-                                          {idx + 1}.
-                                        </span>
-                                        {ex.name}
-                                      </p>
-                                      {ex.alternative && (
-                                        <p className="text-[10.5px] text-[var(--text-muted)] truncate pl-3.5">
-                                          Alt. : {ex.alternative}
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <ExerciseMotionVisual
+                                        exercise={ex}
+                                        size="thumb"
+                                        animated={false}
+                                      />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="font-semibold text-[var(--text-primary)] truncate">
+                                          {idx + 1}. {ex.name}
                                         </p>
-                                      )}
+                                        <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+                                          {ex.muscle} · Toucher pour voir l’exécution
+                                        </p>
+                                      </div>
                                     </div>
-                                    <span className="shrink-0 text-[var(--text-secondary)] tabular-nums font-medium">
-                                      {ex.sets} ×{' '}
+                                    <span className="shrink-0 text-[var(--text-secondary)] font-mono font-bold">
+                                      {ex.sets}×
                                       {ex.type === 'timed'
                                         ? `${ex.durationSeconds}s`
                                         : `${ex.targetReps}`}
@@ -573,64 +579,52 @@ export default function WorkoutsTab({
               </button>
             </div>
           ) : (
-            <div className="space-y-2 pb-12">
+            <div className="space-y-2.5 pb-14">
               {filteredExercises.map((ex) => {
                 const picked = quickPickIds.includes(ex.id);
                 const eqLabels = (ex.equipmentTags || [])
-                  .slice(0, 2)
+                  .slice(0, 1)
                   .map((id) => EQUIPMENT_LABEL_MAP[id] || id)
-                  .join(' · ');
+                  .join('');
 
                 return (
                   <div
                     key={ex.id}
-                    onClick={() => toggleQuickPickExercise(ex.id)}
-                    className={`card-surface p-3.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                    onClick={() => setInspectedExercise(ex)}
+                    className={`card-surface p-3.5 flex items-center justify-between gap-3.5 cursor-pointer transition-all ${
                       picked ? 'border-emerald-400/50 bg-emerald-400/5' : ''
                     }`}
                   >
+                    <ExerciseMotionVisual exercise={ex} size="thumb" animated />
+
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--text-muted)]">
-                        <span className="text-emerald-400 font-medium">{ex.muscle}</span>
-                        {eqLabels && (
-                          <>
-                            <span>·</span>
-                            <span className="truncate">{eqLabels}</span>
-                          </>
-                        )}
-                      </div>
-                      <h4 className="text-xs sm:text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                      <h4 className="text-sm font-bold text-[var(--text-primary)] leading-snug line-clamp-1">
                         {ex.name}
                       </h4>
-                      {ex.cue && (
-                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
-                          {ex.cue}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="text-xs text-[var(--text-secondary)] tabular-nums font-medium">
-                        {ex.sets} ×{' '}
-                        {ex.type === 'timed' ? `${ex.durationSeconds}s` : ex.targetReps}
+                      <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
+                        {ex.muscle}
+                        {eqLabels ? ` · ${eqLabels}` : ''}
+                      </p>
+                      <span className="inline-block text-[11px] font-mono font-semibold text-emerald-400 mt-1">
+                        {ex.sets} × {ex.type === 'timed' ? `${ex.durationSeconds}s` : `${ex.targetReps} reps`}
                       </span>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleQuickPickExercise(ex.id);
-                        }}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                          picked
-                            ? 'bg-emerald-400 text-zinc-950'
-                            : 'bg-[var(--bg-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
-                        }`}
-                        aria-label="Sélectionner l'exercice"
-                      >
-                        {picked ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                      </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleQuickPickExercise(ex.id);
+                      }}
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
+                        picked
+                          ? 'bg-emerald-400 text-zinc-950 font-bold'
+                          : 'bg-[var(--bg-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                      }`}
+                      aria-label="Sélectionner l'exercice"
+                    >
+                      {picked ? <Check className="w-4 h-4 stroke-[2.6]" /> : <Plus className="w-4 h-4" />}
+                    </button>
                   </div>
                 );
               })}
@@ -1132,6 +1126,15 @@ export default function WorkoutsTab({
             </div>
           </div>
         </div>
+      )}
+      {/* MODALE FICHE BIOMÉCANIQUE & EXÉCUTION ANIMÉE */}
+      {inspectedExercise && (
+        <ExerciseDetailModal
+          exercise={inspectedExercise}
+          onClose={() => setInspectedExercise(null)}
+          isSelected={quickPickIds.includes(inspectedExercise.id)}
+          onSelectExercise={(ex) => toggleQuickPickExercise(ex.id)}
+        />
       )}
     </div>
   );

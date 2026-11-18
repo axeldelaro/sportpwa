@@ -6,62 +6,35 @@ import {
   ChevronRight,
   Sparkles,
   Check,
+  Droplets,
+  Scale,
 } from 'lucide-react';
 import { WORKOUT_PROGRAMS } from '../data/workoutsData';
 import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
+import ExerciseMotionVisual from './ExerciseMotionVisual';
 
-function getDynamicCoachNote(lang, hour, todayMacros, targets, waterMl, workouts7dCount) {
+function getDynamicCoachNote(lang, hour, todayMacros, targets, waterMl) {
   const protRem = Math.round(targets.protein - (todayMacros.protein || 0));
   const waterPct = Math.round((waterMl / Math.max(1, targets.waterMl)) * 100);
 
   if (lang === 'en') {
-    if (hour < 11) {
-      return (todayMacros.protein || 0) < 20
-        ? 'ISSN Tip: Start with 25–35g protein and 350 ml water to trigger morning muscle protein synthesis.'
-        : 'Great morning start. Spread hydration evenly before lunch.';
-    }
-    if (hour < 18) {
-      return waterPct < 40
-        ? `Hydration is at ${waterPct}%. ACSM studies show >2% dehydration drops strength and focus.`
-        : 'Solid pacing today. Prioritize complex carbs around your workout.';
-    }
     return protRem > 25
-      ? `${protRem}g protein remaining tonight — tap here to ask the Science AI Coach for a dinner idea.`
-      : 'Targets well managed today. Prioritize 7.5–8.5h sleep for optimal recovery.';
+      ? `${protRem}g protein left today — ask the AI Coach for an exact meal.`
+      : `Hydration at ${waterPct}%. Tap to build a custom workout or meal with AI.`;
   }
-
   if (lang === 'es') {
-    if (hour < 11) {
-      return (todayMacros.protein || 0) < 20
-        ? 'Consejo ISSN: empieza con 25–35g de proteína y un vaso de agua para activar la síntesis muscular.'
-        : 'Buen comienzo de mañana. Mantén una hidratación constante.';
-    }
-    if (hour < 18) {
-      return waterPct < 40
-        ? `Estás al ${waterPct}% de agua. Según ACSM, >2% de deshidratación reduce el rendimiento.`
-        : 'Buen ritmo hoy. Prioriza carbohidratos complejos alrededor del entreno.';
-    }
     return protRem > 25
-      ? `Te faltan ${protRem}g de proteína hoy — toca aquí para pedir una cena al Coach IA.`
-      : 'Objetivos cumplidos hoy. Prioriza un sueño reparador.';
+      ? `Faltan ${protRem}g de proteína hoy — pide una cena exacta al Coach IA.`
+      : `Hidratación al ${waterPct}%. Toca para hablar con tu Coach IA.`;
   }
-
-  if (hour < 11) {
-    return (todayMacros.protein || 0) < 20
-      ? 'Consensus ISSN : vise 25–35g de protéines dès le matin et 350 ml d’eau pour activer la synthèse protéique.'
-      : 'Premier apport validé. Pense à répartir ton hydratation régulièrement avant midi.';
+  if (hour < 12 && (todayMacros.protein || 0) < 20) {
+    return 'Vise 30g de protéines ce matin pour déclencher la synthèse musculaire.';
   }
-  if (hour < 18) {
-    return waterPct < 40
-      ? `Hydratation à ${waterPct}%. Selon l’ACSM, >2% de déficit hydrique réduit la force et la vigilance.`
-      : workouts7dCount === 0
-      ? 'Créneau idéal cet après-midi pour lancer ta première séance de la semaine.'
-      : 'Bonne dynamique aujourd’hui. Garde une source protéique à chaque repas.';
+  if (protRem > 25) {
+    return `Il te reste ${protRem}g de protéines : demande un repas sur-mesure au Coach IA.`;
   }
-  return protRem > 25
-    ? `Il te manque ${protRem}g de protéines ce soir : touche ici pour une idée de dîner calibré par l’IA.`
-    : 'Objectifs bien tenus aujourd’hui. Un sommeil de 7h30+ maximisera ta récupération (Saner et al., 2020).';
+  return 'Objectifs maîtrisés. Touche ici pour générer ta prochaine séance par IA.';
 }
 
 export default function DashboardTab({
@@ -75,7 +48,6 @@ export default function DashboardTab({
   onStartWorkout,
   onResumeWorkout,
   onNavigateTab,
-  bodyMetrics,
   onLogWeight,
 }) {
   const [weightEditOpen, setWeightEditOpen] = useState(false);
@@ -93,13 +65,18 @@ export default function DashboardTab({
   const remainingKcal = targets.kcal - consumedKcal;
   const kcalRatio = Math.min(1, Math.max(0, consumedKcal / Math.max(1, targets.kcal)));
 
-  const ringRadius = 64;
+  const ringRadius = 56;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const strokeDashoffset = ringCircumference - kcalRatio * ringCircumference;
 
   const suggestedWorkout = useMemo(() => {
     const allWorkouts = WORKOUT_PROGRAMS.flatMap((prog) =>
-      prog.workouts.map((w) => ({ ...w, programTitle: prog.title, programId: prog.id }))
+      prog.workouts.map((w) => ({
+        ...w,
+        programTitle: prog.title,
+        programId: prog.id,
+        category: prog.category,
+      }))
     );
     if (!workoutHistory || workoutHistory.length === 0) return allWorkouts[0];
     const lastDoneId = workoutHistory[0]?.workoutId;
@@ -141,12 +118,11 @@ export default function DashboardTab({
     Math.round(((todayMacros?.protein || 0) / Math.max(1, targets.protein)) * 100)
   );
 
-  // Indice d'équilibre scientifique global (0-100)
   const readinessScore = useMemo(() => {
     const sportScore = Math.min(100, (workouts7dCount / 3) * 100) * 0.35;
     const hydrationScore = waterPct * 0.3;
     const nutritionScore = (protPct * 0.6 + Math.round(kcalRatio * 100) * 0.4) * 0.35;
-    return Math.min(100, Math.max(15, Math.round(sportScore + hydrationScore + nutritionScore)));
+    return Math.min(100, Math.max(18, Math.round(sportScore + hydrationScore + nutritionScore)));
   }, [workouts7dCount, waterPct, protPct, kcalRatio]);
 
   const coachNote = useMemo(
@@ -156,10 +132,9 @@ export default function DashboardTab({
         new Date().getHours(),
         todayMacros || {},
         targets,
-        waterMl,
-        workouts7dCount
+        waterMl
       ),
-    [lang, todayMacros, targets, waterMl, workouts7dCount]
+    [lang, todayMacros, targets, waterMl]
   );
 
   const macros = [
@@ -168,30 +143,26 @@ export default function DashboardTab({
       label: tr(lang, 'macro_protein'),
       current: Math.round(todayMacros?.protein || 0),
       target: targets.protein,
-      color: 'bg-sky-400',
+      barColor: 'bg-sky-400',
+      textColor: 'text-sky-400',
     },
     {
       key: 'carbs',
       label: tr(lang, 'macro_carbs'),
       current: Math.round(todayMacros?.carbs || 0),
       target: targets.carbs,
-      color: 'bg-amber-400',
+      barColor: 'bg-amber-400',
+      textColor: 'text-amber-400',
     },
     {
       key: 'fat',
       label: tr(lang, 'macro_fat'),
       current: Math.round(todayMacros?.fat || 0),
       target: targets.fat,
-      color: 'bg-rose-400',
+      barColor: 'bg-rose-400',
+      textColor: 'text-rose-400',
     },
   ];
-
-  const localeCode = lang === 'en' ? 'en-US' : lang === 'es' ? 'es-ES' : 'fr-FR';
-  const todayFormatted = new Date().toLocaleDateString(localeCode, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
 
   const handleSaveWeight = (e) => {
     e.preventDefault();
@@ -203,45 +174,63 @@ export default function DashboardTab({
   };
 
   return (
-    <div className="space-y-4 pb-8 animate-fade-in">
-      {/* Salutation sobre */}
-      <div className="flex items-end justify-between px-1 pt-1">
+    <div className="space-y-5 pb-10 animate-fade-in">
+      {/* En-tête Athlète aéré */}
+      <div className="flex items-center justify-between px-1 pt-1">
         <div>
-          <p className="text-xs text-[var(--text-muted)] capitalize">{todayFormatted}</p>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mt-0.5">
-            {tr(lang, 'greeting_hello')}, {profile?.name || 'Athlète'}
+          <span className="section-eyebrow block">Synthèse Quotidienne</span>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] mt-0.5">
+            {profile?.name || 'Athlète'}
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigateTab('nutrition')}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5 text-emerald-400" />
-          {tr(lang, 'add_meal_short')}
-        </button>
+
+        <div className="px-3.5 py-1.5 rounded-full bg-emerald-400/15 border border-emerald-400/35 text-xs font-bold text-emerald-400 font-mono">
+          SCORE {readinessScore}%
+        </div>
       </div>
 
-      {/* 1. HERO ÉNERGIE & MACROS */}
-      <section className="card-surface p-6">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
-            <svg className="w-36 h-36 -rotate-90" viewBox="0 0 148 148">
+      {/* 1. COCKPIT ÉNERGÉTIQUE ÉPURÉ (Hiérarchie visuelle nette, zéro surcharge) */}
+      <section className="card-surface p-6 space-y-6">
+        <div className="flex items-center justify-between gap-5">
+          <div className="space-y-1.5">
+            <span className="section-eyebrow block">Budget Calorique</span>
+            <div className="text-4xl font-extrabold tracking-tight text-[var(--text-primary)] font-mono leading-none">
+              {Math.abs(remainingKcal)}
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] font-medium">
+              {remainingKcal >= 0 ? tr(lang, 'kcal_remaining') : tr(lang, 'kcal_surplus')} ·{' '}
+              <span className="text-[var(--text-muted)]">
+                {consumedKcal}/{targets.kcal}
+              </span>
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onNavigateTab('nutrition')}
+              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] hover:border-emerald-400/40 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              Journaliser un repas
+            </button>
+          </div>
+
+          <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
+            <svg className="w-32 h-32 -rotate-90" viewBox="0 0 132 132">
               <circle
-                cx="74"
-                cy="74"
+                cx="66"
+                cy="66"
                 r={ringRadius}
                 fill="none"
                 stroke="currentColor"
-                className="text-zinc-500/15"
+                className="text-slate-500/15"
                 strokeWidth="10"
               />
               <circle
-                cx="74"
-                cy="74"
+                cx="66"
+                cy="66"
                 r={ringRadius}
                 fill="none"
-                stroke={remainingKcal < -120 ? '#fbbf24' : '#34d399'}
+                stroke={remainingKcal < -120 ? '#fbbf24' : 'var(--accent)'}
                 strokeWidth="10"
                 strokeLinecap="round"
                 strokeDasharray={ringCircumference}
@@ -249,158 +238,56 @@ export default function DashboardTab({
                 className="transition-all duration-700 ease-out"
               />
             </svg>
-
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-2xl font-bold tracking-tight text-[var(--text-primary)] tabular-nums">
-                {Math.abs(remainingKcal)}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-base font-extrabold text-[var(--text-primary)] font-mono">
+                {Math.round(kcalRatio * 100)}%
               </span>
-              <span className="text-[11px] text-[var(--text-secondary)]">
-                {remainingKcal >= 0
-                  ? tr(lang, 'kcal_remaining')
-                  : tr(lang, 'kcal_surplus')}
-              </span>
-            </div>
-          </div>
-
-          <div className="w-full flex-1 space-y-3.5">
-            {macros.map((m) => {
-              const pct = Math.min(100, Math.round((m.current / Math.max(1, m.target)) * 100));
-              return (
-                <div key={m.key} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-secondary)] font-medium">{m.label}</span>
-                    <span className="tabular-nums text-[var(--text-primary)] font-semibold">
-                      {m.current}
-                      <span className="text-[var(--text-muted)] font-normal"> / {m.target}g</span>
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-zinc-500/15 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${m.color}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-0.5 tabular-nums">
-              <span>
-                {tr(lang, 'consumed_of')} {consumedKcal} / {targets.kcal} kcal
-              </span>
-              <span className="text-emerald-400 font-semibold">
-                {tr(lang, 'readiness_score')} {readinessScore}%
+              <span className="text-[9.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold">
+                Cible
               </span>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* 2. HYDRATATION & POIDS */}
-      <section className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
-        <div className="sm:col-span-7 card-surface p-5 flex flex-col justify-between space-y-3.5">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-medium text-[var(--text-secondary)]">
-              {tr(lang, 'hydration')}
-            </span>
-            <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
-              {(waterMl / 1000).toFixed(2)}{' '}
-              <span className="text-[var(--text-muted)] font-normal">
-                / {(targets.waterMl / 1000).toFixed(1)} L
-              </span>
-            </span>
-          </div>
-
-          <div className="h-1.5 w-full bg-zinc-500/15 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-sky-400 rounded-full transition-all duration-500"
-              style={{ width: `${waterPct}%` }}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onUpdateWater(Math.max(0, waterMl - 250))}
-              className="w-9 h-8 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] flex items-center justify-center active:scale-95 transition-all"
-              aria-label="-250 ml"
-            >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateWater(waterMl + 250)}
-              className="flex-1 h-8 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-[var(--text-primary)] active:scale-95 transition-all tabular-nums"
-            >
-              +250 ml
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateWater(waterMl + 500)}
-              className="flex-1 h-8 rounded-full bg-sky-400/15 text-xs font-semibold text-sky-400 active:scale-95 transition-all tabular-nums"
-            >
-              +500 ml
-            </button>
-          </div>
-        </div>
-
-        <div className="sm:col-span-5 card-surface p-5 flex flex-col justify-between space-y-3">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-medium text-[var(--text-secondary)]">
-              {tr(lang, 'weight')}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setNewWeight(profile?.weight || 74);
-                setWeightEditOpen((v) => !v);
-              }}
-              className="text-[11px] font-medium text-emerald-400"
-            >
-              {weightEditOpen ? tr(lang, 'close') : tr(lang, 'update')}
-            </button>
-          </div>
-
-          {!weightEditOpen ? (
-            <div>
-              <div className="text-2xl font-bold text-[var(--text-primary)] tabular-nums tracking-tight">
-                {profile?.weight || 74}{' '}
-                <span className="text-sm font-normal text-[var(--text-muted)]">kg</span>
-              </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                {bodyMetrics?.length || 0} {tr(lang, 'weighed_entries')}
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSaveWeight} className="flex items-center gap-1.5">
-              <input
-                type="number"
-                step="0.1"
-                min="35"
-                max="250"
-                value={newWeight}
-                onChange={(e) => setNewWeight(e.target.value)}
-                className="input-dark !py-1.5 !px-2.5 text-xs tabular-nums"
-              />
-              <button
-                type="submit"
-                className="w-8 h-8 rounded-full bg-emerald-400 text-zinc-950 flex items-center justify-center shrink-0"
+        {/* 3 Colonnes Macronutriments spacieuses */}
+        <div className="grid grid-cols-3 gap-2.5 pt-4 border-t border-[var(--border-subtle)]">
+          {macros.map((m) => {
+            const pct = Math.min(100, Math.round((m.current / Math.max(1, m.target)) * 100));
+            return (
+              <div
+                key={m.key}
+                className="rounded-2xl bg-[var(--bg-subtle)]/55 p-3 space-y-2"
               >
-                <Check className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          )}
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] block truncate">
+                  {m.label}
+                </span>
+                <div className="font-mono text-sm font-extrabold text-[var(--text-primary)]">
+                  {m.current}
+                  <span className="text-[11px] font-normal text-[var(--text-muted)]">
+                    /{m.target}g
+                  </span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-slate-500/15 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${m.barColor}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      {/* 3. SÉANCE DU JOUR */}
-      <section className="card-surface p-5">
+      {/* 2. SÉANCE VEDETTE AVEC APERÇU BIOMÉCANIQUE ANIMÉ */}
+      <section className="card-surface p-5 space-y-4">
         {activeWorkoutSession ? (
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <span className="text-[11px] font-medium text-emerald-400">
+              <span className="section-eyebrow !text-emerald-400 block">
                 {tr(lang, 'session_paused')}
               </span>
-              <h2 className="text-base font-semibold text-[var(--text-primary)] truncate mt-0.5">
+              <h2 className="text-lg font-extrabold text-[var(--text-primary)] truncate mt-1">
                 {activeWorkoutSession.workoutTitle}
               </h2>
             </div>
@@ -409,54 +296,142 @@ export default function DashboardTab({
               onClick={onResumeWorkout}
               className="btn-accent shrink-0"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
+              <Play className="w-4 h-4 fill-current" />
               {tr(lang, 'resume')}
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="text-xs font-medium text-[var(--text-secondary)]">
-                  {tr(lang, 'next_workout')}
-                </span>
-                <h2 className="text-base font-semibold text-[var(--text-primary)] mt-0.5">
-                  {suggestedWorkout.title}
-                </h2>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  {suggestedWorkout.durationMin} min ·{' '}
-                  {(suggestedWorkout.targetMuscles || []).slice(0, 3).join(', ')}
-                </p>
-              </div>
+          <>
+            <div className="flex items-center justify-between">
+              <span className="section-eyebrow">{tr(lang, 'next_workout')}</span>
               <button
                 type="button"
                 onClick={() => onNavigateTab('workouts')}
-                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5 shrink-0"
+                className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5"
               >
-                {tr(lang, 'program')}
+                Catalogue
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <ExerciseMotionVisual
+                exercise={suggestedWorkout?.exercises?.[0]}
+                size="thumb"
+                animated
+              />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-extrabold text-[var(--text-primary)] leading-snug truncate">
+                  {suggestedWorkout.title}
+                </h2>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  {suggestedWorkout.durationMin} min · {suggestedWorkout.exercises.length} mouvements
+                </p>
+              </div>
             </div>
 
             <button
               type="button"
               onClick={() => onStartWorkout(suggestedWorkout, 'normal')}
-              className="btn-primary w-full"
+              className="btn-accent w-full"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
+              <Play className="w-4 h-4 fill-current" />
               {tr(lang, 'start_workout')}
             </button>
-          </div>
+          </>
         )}
       </section>
 
-      {/* 4. RÉGULARITÉ 7 JOURS & NOTE SCIENTIFIQUE */}
+      {/* 3. BENTO TÉLÉMÉTRIE : HYDRATATION & POIDS CORPOREL */}
+      <section className="grid grid-cols-2 gap-3.5">
+        <div className="card-surface p-4 flex flex-col justify-between space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="section-eyebrow">Eau</span>
+            <Droplets className="w-4 h-4 text-sky-400" />
+          </div>
+
+          <div>
+            <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
+              {(waterMl / 1000).toFixed(2)}
+              <span className="text-xs font-normal text-[var(--text-muted)] ml-1">
+                /{(targets.waterMl / 1000).toFixed(1)}L
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-slate-500/15 rounded-full overflow-hidden mt-2">
+              <div
+                className="h-full bg-sky-400 rounded-full transition-all duration-500"
+                style={{ width: `${waterPct}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onUpdateWater(Math.max(0, waterMl - 250))}
+              className="w-8 h-8 rounded-xl bg-[var(--bg-subtle)] text-[var(--text-secondary)] flex items-center justify-center active:scale-95"
+              aria-label="-250 ml"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateWater(waterMl + 250)}
+              className="flex-1 h-8 rounded-xl bg-sky-400/15 text-xs font-bold text-sky-400 active:scale-95 font-mono"
+            >
+              +250ml
+            </button>
+          </div>
+        </div>
+
+        <div className="card-surface p-4 flex flex-col justify-between space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="section-eyebrow">{tr(lang, 'weight')}</span>
+            <Scale className="w-4 h-4 text-emerald-400" />
+          </div>
+
+          {!weightEditOpen ? (
+            <>
+              <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
+                {profile?.weight || 74}
+                <span className="text-xs font-normal text-[var(--text-muted)] ml-1">kg</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setNewWeight(profile?.weight || 74);
+                  setWeightEditOpen(true);
+                }}
+                className="w-full h-8 rounded-xl bg-[var(--bg-subtle)] text-xs font-semibold text-[var(--text-primary)]"
+              >
+                {tr(lang, 'update')}
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleSaveWeight} className="space-y-2">
+              <input
+                type="number"
+                step="0.1"
+                min="35"
+                max="250"
+                value={newWeight}
+                onChange={(e) => setNewWeight(e.target.value)}
+                className="input-dark !py-1.5 !px-2.5 text-xs font-mono"
+              />
+              <button type="submit" className="btn-accent w-full !py-1.5 !text-xs">
+                Valider
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {/* 4. ASSIDUITÉ 7 JOURS & ACCÈS RAPIDE COACH IA */}
       <section className="card-surface p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--text-secondary)]">
-            {tr(lang, 'last_7_days')}
-          </span>
-          <span className="text-xs text-[var(--text-primary)] font-medium tabular-nums">
+          <span className="section-eyebrow">{tr(lang, 'last_7_days')}</span>
+          <span className="text-xs font-bold text-[var(--text-primary)] font-mono">
             {workouts7dCount} {tr(lang, 'sessions_count')}
           </span>
         </div>
@@ -464,17 +439,19 @@ export default function DashboardTab({
         <div className="grid grid-cols-7 gap-2">
           {last7Days.map((d) => (
             <div key={d.date} className="flex flex-col items-center gap-1.5">
-              <span className="text-[10px] text-[var(--text-muted)]">{d.label}</span>
+              <span className="text-[10px] font-semibold text-[var(--text-muted)]">
+                {d.label}
+              </span>
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-all ${
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs transition-all ${
                   d.done
-                    ? 'bg-emerald-400 text-zinc-950 font-bold'
+                    ? 'bg-emerald-400 text-zinc-950 font-extrabold'
                     : d.isToday
                     ? 'border border-emerald-400/50 text-[var(--text-primary)]'
                     : 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'
                 }`}
               >
-                {d.done ? <Check className="w-3.5 h-3.5 stroke-[2.6]" /> : '·'}
+                {d.done ? <Check className="w-4 h-4 stroke-[2.8]" /> : '·'}
               </div>
             </div>
           ))}
@@ -483,15 +460,17 @@ export default function DashboardTab({
         <button
           type="button"
           onClick={() => onNavigateTab('coach')}
-          className="w-full pt-3 border-t border-[var(--border-subtle)] flex items-start justify-between gap-3 text-left group"
+          className="w-full pt-3.5 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3 text-left group"
         >
-          <div className="flex items-start gap-2.5">
-            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-[var(--text-secondary)] leading-relaxed group-hover:text-[var(--text-primary)] transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-400/15 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-snug group-hover:text-[var(--text-primary)] transition-colors">
               {coachNote}
             </p>
           </div>
-          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] shrink-0 mt-0.5" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
         </button>
       </section>
     </div>

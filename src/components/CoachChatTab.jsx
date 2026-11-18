@@ -4,7 +4,10 @@ import {
   RotateCcw,
   BookOpen,
   ExternalLink,
-  Zap,
+  Cpu,
+  Play,
+  Plus,
+  Check,
 } from 'lucide-react';
 import {
   generateCoachResponse,
@@ -12,6 +15,7 @@ import {
   QUICK_COACH_SUGGESTIONS_BY_LANG,
 } from '../utils/localCoachEngine';
 import { tr } from '../i18n/translations';
+import ExerciseMotionVisual from './ExerciseMotionVisual';
 
 function renderFormattedLine(line, lineIdx) {
   const parts = String(line).split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -20,7 +24,7 @@ function renderFormattedLine(line, lineIdx) {
       {parts.map((part, idx) => {
         if (part.startsWith('**') && part.endsWith('**')) {
           return (
-            <strong key={idx} className="font-semibold text-[var(--text-primary)]">
+            <strong key={idx} className="font-bold text-[var(--text-primary)]">
               {part.slice(2, -2)}
             </strong>
           );
@@ -47,10 +51,13 @@ export default function CoachChatTab({
   messages = [],
   onAppendMessage,
   onClearHistory,
+  onStartWorkoutFromCoach,
+  onLogMealFromCoach,
 }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [memory, setMemory] = useState(null);
+  const [loggedActionIds, setLoggedActionIds] = useState({});
   const [dynamicSuggestions, setDynamicSuggestions] = useState(
     QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr
   );
@@ -90,7 +97,6 @@ export default function CoachChatTab({
       timestamp: nowTs,
     };
 
-    // 1. Affichage et persistance synchrones immédiats (0 ms, zéro perte possible)
     setInput('');
     onAppendMessage(userMsg);
     setIsTyping(true);
@@ -104,14 +110,13 @@ export default function CoachChatTab({
       lang,
     };
 
-    // 2. Génération instantanée hors-ligne protégée par try/catch
     setTimeout(() => {
       let response;
       try {
         response = generateCoachResponse(trimmed, contextPayload);
       } catch {
         response = {
-          text: `Voici ton point rapide : il te reste **${Math.max(0, Math.round((profile?.targets?.kcal || 2200) - (todayMacros?.kcal || 0)))} kcal** et **${Math.max(0, Math.round((profile?.targets?.protein || 140) - (todayMacros?.protein || 0)))}g de protéines** aujourd'hui.`,
+          text: `Point rapide : il te reste **${Math.max(0, Math.round((profile?.targets?.kcal || 2200) - (todayMacros?.kcal || 0)))} kcal** et **${Math.max(0, Math.round((profile?.targets?.protein || 140) - (todayMacros?.protein || 0)))}g de protéines** aujourd'hui.`,
           sources: [],
           suggestions:
             QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr,
@@ -124,6 +129,9 @@ export default function CoachChatTab({
         role: 'assistant',
         content: response?.text || 'Réponse générée.',
         sources: Array.isArray(response?.sources) ? response.sources : [],
+        workoutAction: response?.workoutAction || null,
+        mealAction: response?.mealAction || null,
+        exerciseDemo: response?.exerciseDemo || null,
         timestamp: replyTs,
       };
 
@@ -136,7 +144,7 @@ export default function CoachChatTab({
         }
         setIsTyping(false);
       }
-    }, 110);
+    }, 100);
   };
 
   const handleSubmit = (e) => {
@@ -145,17 +153,17 @@ export default function CoachChatTab({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-9.8rem)] max-h-[760px] animate-fade-in">
-      {/* Barre supérieure : Statut IA Pré-chargée Hors-Ligne Instantanée */}
+    <div className="flex flex-col h-[calc(100dvh-11rem)] max-h-[760px] animate-fade-in">
+      {/* En-tête Moteur IA Autonome */}
       <div className="flex items-center justify-between gap-2 px-1 pb-3 shrink-0">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/25 text-[11px] sm:text-xs font-medium text-emerald-400 whitespace-nowrap">
-          <Zap className="w-3.5 h-3.5 shrink-0" />
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-400/15 border border-emerald-400/35 text-[11px] font-bold text-emerald-400 whitespace-nowrap">
+          <Cpu className="w-3.5 h-3.5 shrink-0" />
           <span>
             {lang === 'en'
-              ? 'Offline Science AI · Ready'
+              ? 'Autonomous Club AI · Zero Quota'
               : lang === 'es'
-                ? 'IA Científica Offline · Lista'
-                : 'IA Hors-Ligne · Pré-chargée'}
+                ? 'IA Autónoma Club · Sin Cuota'
+                : 'Coach IA Embarqué · Sans Quota'}
           </span>
         </div>
 
@@ -163,62 +171,112 @@ export default function CoachChatTab({
           <button
             type="button"
             onClick={() => {
-              if (window.confirm('Effacer l’historique de conversation ?')) {
+              if (window.confirm('Effacer la conversation ?')) {
                 onClearHistory();
                 setMemory(null);
               }
             }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--bg-subtle)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-            title="Effacer l'historique"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
-            <span className="hidden xs:inline">Effacer</span>
+            <span>Réinitialiser</span>
           </button>
         )}
       </div>
 
       {/* Fil de discussion */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-3.5 pr-1 pb-2">
-        <div className="max-w-[90%] rounded-3xl rounded-tl-md card-surface px-4 py-3.5 text-xs text-[var(--text-secondary)] leading-relaxed">
-          {lang === 'en' ? (
-            <>
-              Hi <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlete'}</strong>. My sport & nutrition knowledge base (<strong>25 ISSN, ACSM & PubMed studies</strong>, meal plans, food swaps, 1RM & HR zones) is already cached on your device for instant offline answers.
-            </>
-          ) : lang === 'es' ? (
-            <>
-              Hola <strong className="text-[var(--text-primary)]">{profile?.name || 'Atleta'}</strong>. Mi motor científico (<strong>25 estudios ISSN, ACSM y PubMed</strong>, menús, equivalencias, 1RM y zonas cardio) ya está en caché para responder al instante con o sin conexión.
-            </>
-          ) : (
-            <>
-              Salut <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Mon moteur IA Sport & Nutrition (<strong>25 méta-analyses ISSN, ACSM & PubMed</strong>, menus complets, équivalences d’aliments, anatomie, 1RM et zones cardio) est déjà en cache pour te répondre instantanément, même hors-ligne.
-            </>
-          )}
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-4 pr-1 pb-2">
+        <div className="max-w-[92%] rounded-3xl rounded-tl-md card-surface p-4 text-xs text-[var(--text-secondary)] leading-relaxed space-y-1.5">
+          <span className="section-eyebrow !text-emerald-400 block">PULSE Intelligence</span>
+          <p>
+            Bonjour <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Demande-moi de <strong>composer une séance sur-mesure</strong>, de <strong>calculer les macros de plusieurs aliments</strong>, de créer un <strong>repas à un total précis de kcal</strong> ou d'afficher la <strong>biomécanique animée d'un exercice</strong>.
+          </p>
         </div>
 
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
+          const alreadyLogged = Boolean(loggedActionIds[msg.id]);
+
           return (
             <div
               key={msg.id}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1.5`}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-2`}
             >
               <div
-                className={`max-w-[88%] px-4 py-3 text-xs space-y-1 ${
+                className={`max-w-[90%] p-4 text-xs space-y-2.5 ${
                   isUser
-                    ? 'rounded-3xl rounded-tr-md bg-emerald-400 text-zinc-950 font-medium'
+                    ? 'rounded-3xl rounded-tr-md bg-emerald-400 text-zinc-950 font-bold'
                     : 'rounded-3xl rounded-tl-md card-surface text-[var(--text-secondary)]'
                 }`}
               >
-                {isUser
-                  ? msg.content
-                  : String(msg.content || '')
-                      .split('\n')
-                      .map((line, idx) => renderFormattedLine(line, idx))}
+                {isUser ? (
+                  <span>{msg.content}</span>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      {String(msg.content || '')
+                        .split('\n')
+                        .map((line, idx) => renderFormattedLine(line, idx))}
+                    </div>
+
+                    {/* Aperçu d'exécution animé intégré à la réponse IA */}
+                    {msg.exerciseDemo && (
+                      <div className="pt-1">
+                        <ExerciseMotionVisual
+                          exercise={msg.exerciseDemo}
+                          size="card"
+                          animated
+                          showAnatomy={false}
+                        />
+                      </div>
+                    )}
+
+                    {/* Bouton interactif 1-clic : Lancer la séance générée par l'IA */}
+                    {msg.workoutAction && onStartWorkoutFromCoach && (
+                      <button
+                        type="button"
+                        onClick={() => onStartWorkoutFromCoach(msg.workoutAction)}
+                        className="btn-accent w-full !py-2.5 !text-xs mt-1"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Lancer cette séance ({msg.workoutAction.exercises?.length || 0} ex.)
+                      </button>
+                    )}
+
+                    {/* Bouton interactif 1-clic : Ajouter le repas calculé au journal */}
+                    {msg.mealAction && onLogMealFromCoach && (
+                      <button
+                        type="button"
+                        disabled={alreadyLogged}
+                        onClick={() => {
+                          onLogMealFromCoach(msg.mealAction);
+                          setLoggedActionIds((prev) => ({ ...prev, [msg.id]: true }));
+                        }}
+                        className={`w-full py-2.5 px-4 rounded-2xl font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-all mt-1 ${
+                          alreadyLogged
+                            ? 'bg-[var(--bg-subtle)] text-emerald-400 border border-emerald-400/30'
+                            : 'btn-primary !py-2.5 !text-xs'
+                        }`}
+                      >
+                        {alreadyLogged ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            Ajouté à ton journal du jour
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5" />
+                            Ajouter au journal ({msg.mealAction.kcal} kcal)
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
 
-              {/* Citations scientifiques internationales cliquables (PubMed / ISSN) */}
               {!isUser && Array.isArray(msg.sources) && msg.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-w-[88%] pl-1">
+                <div className="flex flex-wrap gap-1.5 max-w-[90%] pl-1">
                   {msg.sources.map((src) => (
                     <a
                       key={src.id}
@@ -254,7 +312,7 @@ export default function CoachChatTab({
         )}
       </div>
 
-      {/* Suggestions rapides & Barre d'envoi */}
+      {/* Suggestions & Saisie */}
       <div className="pt-2 space-y-2.5 shrink-0">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {dynamicSuggestions.map((sug) => (
@@ -262,7 +320,7 @@ export default function CoachChatTab({
               key={sug}
               type="button"
               onClick={() => sendQuestion(sug)}
-              className="px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] whitespace-nowrap transition-colors"
+              className="px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] whitespace-nowrap transition-colors"
             >
               {sug}
             </button>
@@ -271,7 +329,7 @@ export default function CoachChatTab({
 
         <form
           onSubmit={handleSubmit}
-          className="flex items-center gap-2 card-surface !rounded-full pl-4 pr-1.5 py-1.5"
+          className="flex items-center gap-2 card-surface !rounded-2xl pl-4 pr-2 py-2"
         >
           <input
             type="text"
@@ -283,10 +341,10 @@ export default function CoachChatTab({
           <button
             type="submit"
             disabled={!input.trim() || isTyping}
-            className="w-8 h-8 rounded-full bg-emerald-400 disabled:opacity-30 text-zinc-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
+            className="w-9 h-9 rounded-xl bg-emerald-400 disabled:opacity-30 text-zinc-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
             aria-label="Envoyer"
           >
-            <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+            <ArrowUp className="w-4 h-4 stroke-[2.6]" />
           </button>
         </form>
       </div>

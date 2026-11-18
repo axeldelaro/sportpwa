@@ -8,7 +8,11 @@ import {
   computeRecipeMacros,
   isRecipeCompatibleWithProfile,
 } from '../data/recipesData.js';
-import { WORKOUT_PROGRAMS } from '../data/workoutsData.js';
+import {
+  WORKOUT_PROGRAMS,
+  EXERCISE_CATALOG,
+  matchesSelectedEquipment,
+} from '../data/workoutsData.js';
 import { calculateNutritionalTargets } from '../db/database.js';
 import {
   normalizeText,
@@ -25,44 +29,36 @@ import {
 
 export const QUICK_COACH_SUGGESTIONS_BY_LANG = {
   fr: [
-    'Génère-moi un menu complet pour la journée',
-    'Combler mes protéines du jour',
-    'Par quoi remplacer 80g de riz ?',
-    'Créatine & compléments vraiment utiles ?',
-    'Que manger avant et après ma séance ?',
-    'Quel programme choisir pour mon objectif ?',
-    'Calculer ma Zone 2 cardio & VO2max',
-    'Comment appliquer la surcharge progressive ?',
+    'Crée-moi une séance Pecs & Triceps de 35 min',
+    'Menu complet calibré sur mes macros du jour',
+    'Macros de 3 œufs, 70g d’avoine et 1 banane',
+    'Comment bien exécuter le Hip Thrust ?',
+    'Par quoi remplacer 80g de riz basmati ?',
+    'Repas du soir à 650 kcal riche en protéines',
+    'Créatine & compléments dosés pour mon poids',
   ],
   en: [
-    'Generate a full-day meal plan for my macros',
-    'Fill my remaining protein today',
+    'Build a 35-min Chest & Triceps workout',
+    'Full-day meal plan for my exact macros',
+    'Macros in 3 eggs, 70g oats and 1 banana',
+    'How to perform the Hip Thrust properly?',
     'Swap for 80g of basmati rice?',
-    'Which supplements actually work (science)?',
-    'What to eat before and after training?',
-    'Which workout split fits my goal?',
-    'Calculate my Zone 2 heart rate',
+    '650 kcal high-protein dinner idea',
   ],
   es: [
-    'Genera un menú completo para mis macros',
-    'Cubrir mis proteínas restantes hoy',
+    'Créame una sesión de Pecho y Tríceps de 35 min',
+    'Menú completo calibrado a mis macros',
+    'Macros de 3 huevos, 70g avena y 1 plátano',
+    '¿Cómo ejecutar bien el Hip Thrust?',
     '¿Por qué cambiar 80g de arroz?',
-    '¿Qué suplementos funcionan según la ciencia?',
-    '¿Qué comer antes y después de entrenar?',
-    '¿Qué programa elegir para mi objetivo?',
-    'Calcular mi Zona 2 cardiovascular',
   ],
 };
 
 export const QUICK_COACH_SUGGESTIONS = QUICK_COACH_SUGGESTIONS_BY_LANG.fr;
 
-const PRECACHE_MARKER_KEY = 'pulsefit_coach_offline_ready_v4';
+const PRECACHE_MARKER_KEY = 'pulsefit_coach_offline_ready_v6';
 let isEnginePrewarmed = false;
 
-/**
- * Pré-charge et indexe l'intégralité du moteur IA + base scientifique + 151 aliments + 40 recettes
- * dès la milliseconde d'ouverture du site (0 ms d'attente au clic sur Coach IA, 100% hors-ligne).
- */
 export function warmUpCoachEngine() {
   if (isEnginePrewarmed) return true;
   try {
@@ -75,8 +71,7 @@ export function warmUpCoachEngine() {
           ready: true,
           studies: SCIENTIFIC_STUDIES.length,
           foods: getAllFoods().length,
-          recipes: RECIPES_DATA.length,
-          programs: WORKOUT_PROGRAMS.length,
+          exercises: EXERCISE_CATALOG.length,
           cachedAt: Date.now(),
         })
       );
@@ -88,29 +83,454 @@ export function warmUpCoachEngine() {
   return true;
 }
 
-function extractGramsFromText(rawText) {
-  const match = String(rawText).match(/(\d{1,4})\s*(?:g|gr|grammes|grams|gramos|ml)\b/i);
-  if (match) return Number(match[1]);
-  const bareNum = String(rawText).match(/\b(\d{2,3})\b/);
-  if (bareNum) return Number(bareNum[1]);
-  return null;
+const NATURAL_UNIT_WEIGHTS = [
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:oeufs?|œufs?|eggs?|huevos?)\b/i, gramsPerUnit: 60 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:bananes?|bananas?|platanos?)\b/i, gramsPerUnit: 120 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:pommes?|poires?|oranges?|peches?|apples?)\b/i, gramsPerUnit: 150 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:citrons?|limes?)\b/i, gramsPerUnit: 55 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:kiwis?|abricots?|figues?|clementines?)\b/i, gramsPerUnit: 75 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:avocats?)\b/i, gramsPerUnit: 140 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:tranches?|slices?)\b/i, gramsPerUnit: 38 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:cuilleres?\s*a?\s*soupe|cas|c\.a\.s|tbsp|cuilleres?)\b/i, gramsPerUnit: 12 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:cuilleres?\s*a?\s*cafe|cac|tsp)\b/i, gramsPerUnit: 5 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:pots?|yaourts?)\b/i, gramsPerUnit: 125 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:scoops?|doses?|shakers?)\b/i, gramsPerUnit: 30 },
+  { regex: /\b(\d+(?:[.,]\d+)?)\s*(?:croissants?|pains?\s*au\s*chocolat|wraps?|tortillas?)\b/i, gramsPerUnit: 65 },
+];
+
+function extractGramsSmart(segmentText, foodObj) {
+  const explicitMatch = String(segmentText).match(
+    /(\d+(?:[.,]\d+)?)\s*(?:g|gr|grammes|grams|ml|cl)\b/i
+  );
+  if (explicitMatch) {
+    const val = Number(explicitMatch[1].replace(',', '.'));
+    return /cl\b/i.test(explicitMatch[0]) ? Math.round(val * 10) : Math.round(val);
+  }
+
+  for (const rule of NATURAL_UNIT_WEIGHTS) {
+    const m = String(segmentText).match(rule.regex);
+    if (m) {
+      return Math.round(Number(m[1].replace(',', '.')) * rule.gramsPerUnit);
+    }
+  }
+
+  const leadingCount = String(segmentText)
+    .trim()
+    .match(/^(\d{1,2})\s+[a-zA-ZÀ-ÿœŒ]/);
+  if (leadingCount) {
+    const count = Number(leadingCount[1]);
+    if (count >= 1 && count <= 12) {
+      return Math.round(count * (foodObj?.defaultGrams || 60));
+    }
+  }
+
+  const bareGrams = String(segmentText).match(/\b(\d{2,4})\b/);
+  if (bareGrams) return Number(bareGrams[1]);
+
+  return foodObj?.defaultGrams || 100;
 }
 
-function extractCandidateFoodPhrase(normText) {
+function cleanFoodSearchPhrase(rawSeg) {
   const stopWords = new Set([
-    'par', 'quoi', 'remplacer', 'substituer', 'echanger', 'equivalent', 'equivalences',
-    'equivalence', 'de', 'du', 'des', 'le', 'la', 'les', 'un', 'une', 'd', 'l',
-    'pour', 'avec', 'sans', 'en', 'mode', 'iso', 'calorique', 'calories', 'kcal',
-    'macro', 'macros', 'grammes', 'gr', 'g', 'ml', 'alternative', 'alternatives',
-    'what', 'can', 'swap', 'replace', 'of', 'for', 'por', 'que', 'cambiar', 'sustituir',
+    'combien', 'de', 'du', 'des', 'le', 'la', 'les', 'un', 'une', 'dans', 'avec',
+    'pour', 'calories', 'calorie', 'kcal', 'proteines', 'proteine', 'macros', 'macro',
+    'glucides', 'lipides', 'il', 'ya', 'a', 't', 'on', 'je', 'mange', 'pris',
+    'cuillere', 'cuilleres', 'soupe', 'cafe', 'tranche', 'tranches', 'pot', 'pots',
+    'grammes', 'gr', 'g', 'ml', 'cl', 'in', 'of', 'and', 'with', 'con', 'en',
   ]);
 
-  return normText
-    .replace(/\b\d+\s*(g|gr|grammes|grams|ml)?\b/g, ' ')
+  return normalizeText(rawSeg)
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:g|gr|ml|cl)?\b/g, ' ')
     .split(' ')
     .filter((w) => w.length >= 2 && !stopWords.has(w))
     .join(' ')
     .trim();
+}
+
+/**
+ * 1. ANALYSEUR MULTI-ALIMENTS & CALCULATEUR DE REPAS EN LANGAGE NATUREL
+ */
+function tryParseMultiFoodNutritionQuery(userMessage, norm) {
+  const isSwap =
+    norm.includes('remplac') ||
+    norm.includes('substitu') ||
+    norm.includes('equivalen') ||
+    norm.includes('swap') ||
+    norm.includes('cambiar');
+  if (isSwap) return null;
+
+  const isMenuOrWorkout =
+    norm.includes('menu complet') ||
+    norm.includes('journee') ||
+    norm.includes('seance') ||
+    norm.includes('programme') ||
+    norm.includes('exercice') ||
+    norm.includes('1rm');
+  if (isMenuOrWorkout) return null;
+
+  const hasNutritionTrigger =
+    norm.includes('macro') ||
+    norm.includes('calori') ||
+    norm.includes('kcal') ||
+    norm.includes('combien') ||
+    norm.includes('valeur') ||
+    /,|\+|\bet\b|\bavec\b|\band\b/.test(norm);
+
+  if (!hasNutritionTrigger && norm.length > 42) return null;
+
+  const rawParts = String(userMessage)
+    .split(/,|\+|\s+et\s+|\s+avec\s+|\s+and\s+|\s+y\s+/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (rawParts.length === 0 || rawParts.length > 8) return null;
+
+  const parsedItems = [];
+  for (const seg of rawParts) {
+    const cleaned = cleanFoodSearchPhrase(seg);
+    if (!cleaned) continue;
+    const food = findFoodByQuery(cleaned);
+    if (food) {
+      const grams = extractGramsSmart(seg, food);
+      const macros = calculateFoodMacros(food, grams);
+      parsedItems.push({ food, grams, macros });
+    }
+  }
+
+  if (parsedItems.length === 0) return null;
+  // Si un seul aliment sans chiffre ni mot clé nutritionnel, laisse passer les autres intentions si plus pertinentes
+  if (
+    parsedItems.length === 1 &&
+    !hasNutritionTrigger &&
+    !/\d/.test(userMessage) &&
+    norm.split(' ').length > 4
+  ) {
+    return null;
+  }
+
+  const totals = parsedItems.reduce(
+    (acc, it) => ({
+      kcal: acc.kcal + it.macros.kcal,
+      protein: Math.round((acc.protein + it.macros.protein) * 10) / 10,
+      carbs: Math.round((acc.carbs + it.macros.carbs) * 10) / 10,
+      fat: Math.round((acc.fat + it.macros.fat) * 10) / 10,
+      fiber: Math.round((acc.fiber + it.macros.fiber) * 10) / 10,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+  );
+
+  const lines = parsedItems.map(
+    (it) =>
+      `• **${it.grams}g ${it.food.name}** → **${it.macros.kcal} kcal** | ${it.macros.protein}g P · ${it.macros.carbs}g G · ${it.macros.fat}g L`
+  );
+
+  const title =
+    parsedItems.length === 1
+      ? `${parsedItems[0].grams}g ${parsedItems[0].food.name}`
+      : ` Assiette (${parsedItems.map((p) => p.food.name.split(' ')[0]).slice(0, 3).join(' + ')})`;
+
+  return {
+    text:
+      `**Calcul Nutritionnel de Précision (CIQUAL / USDA)** :\n\n` +
+      lines.join('\n') +
+      `\n\n**Total exact :** **${totals.kcal} kcal** · **${totals.protein}g Protéines** · **${totals.carbs}g Glucides** · **${totals.fat}g Lipides** *(Fibres : ${totals.fiber}g)*`,
+    mealAction: {
+      title: title.trim(),
+      kcal: totals.kcal,
+      protein: totals.protein,
+      items: parsedItems.map((p) => ({ foodId: p.food.id, grams: p.grams })),
+    },
+    memory: {
+      lastIntent: 'substitution',
+      lastFoodId: parsedItems[0].food.id,
+      lastGrams: parsedItems[0].grams,
+    },
+  };
+}
+
+/**
+ * 2. GÉNÉRATEUR DE SÉANCE SUR-MESURE À LA DEMANDE DEPUIS LE LANGAGE NATUREL
+ */
+function tryComposeCustomWorkoutFromPrompt(userMessage, norm, profile) {
+  const isWorkoutBuildRequest =
+    (norm.includes('seance') ||
+      norm.includes('entrainement') ||
+      norm.includes('workout') ||
+      norm.includes('routine') ||
+      norm.includes('sesion')) &&
+    (norm.includes('cree') ||
+      norm.includes('creer') ||
+      norm.includes('fais') ||
+      norm.includes('prepare') ||
+      norm.includes('donne') ||
+      norm.includes('genere') ||
+      norm.includes('compose') ||
+      norm.includes('build') ||
+      norm.includes('pec') ||
+      norm.includes('dos') ||
+      norm.includes('jambe') ||
+      norm.includes('fessier') ||
+      norm.includes('bras') ||
+      norm.includes('abdo') ||
+      norm.includes('epaule') ||
+      norm.includes('callisthen') ||
+      norm.includes('elastique') ||
+      norm.includes('chaise romaine') ||
+      norm.includes('sans materiel') ||
+      norm.includes('haltere') ||
+      /\d{2}\s*min/.test(norm));
+
+  if (!isWorkoutBuildRequest) return null;
+
+  // Extraction de la durée souhaitée
+  const minMatch = norm.match(/(\d{2})\s*min/);
+  const durationMin = minMatch
+    ? Math.max(15, Math.min(90, Number(minMatch[1])))
+    : 38;
+  const targetCount =
+    durationMin <= 22 ? 3 : durationMin <= 34 ? 4 : durationMin <= 48 ? 5 : 6;
+
+  // Extraction des muscles demandés
+  const requestedMuscles = [];
+  if (norm.includes('pec') || norm.includes('poitrine') || norm.includes('push') || norm.includes('chest')) {
+    requestedMuscles.push('pectoraux');
+  }
+  if (norm.includes('dos') || norm.includes('traction') || norm.includes('pull') || norm.includes('back')) {
+    requestedMuscles.push('dos');
+  }
+  if (norm.includes('epaul') || norm.includes('delto') || norm.includes('shoulder')) {
+    requestedMuscles.push('epaules');
+  }
+  if (norm.includes('bras') || norm.includes('biceps') || norm.includes('triceps') || norm.includes('arm')) {
+    requestedMuscles.push('bras');
+  }
+  if (
+    norm.includes('jambe') ||
+    norm.includes('fessier') ||
+    norm.includes('cuiss') ||
+    norm.includes('quad') ||
+    norm.includes('ischio') ||
+    norm.includes('leg') ||
+    norm.includes('glute')
+  ) {
+    requestedMuscles.push('jambes_fessiers');
+  }
+  if (norm.includes('abdo') || norm.includes('gainage') || norm.includes('core') || norm.includes('ventre')) {
+    requestedMuscles.push('abdos');
+  }
+
+  // Extraction du matériel demandé dans la phrase (sinon préférences profil)
+  const eqRequested = [];
+  if (norm.includes('sans materiel') || norm.includes('poids du corps') || norm.includes('maison sans')) {
+    eqRequested.push('none');
+  }
+  if (norm.includes('chaise romaine')) eqRequested.push('roman_chair', 'pullup_bar', 'dip_bars');
+  if (norm.includes('elastique') || norm.includes('band')) eqRequested.push('bands');
+  if (norm.includes('haltere') || norm.includes('dumbbell')) eqRequested.push('dumbbells', 'bench');
+  if (norm.includes('kettlebell') || norm.includes('kb')) eqRequested.push('kettlebell');
+  if (norm.includes('anneau') || norm.includes('trx') || norm.includes('sangle')) eqRequested.push('trx_rings');
+  if (norm.includes('salle') || norm.includes('machine') || norm.includes('poulie')) {
+    eqRequested.push('machines', 'cables', 'barbell', 'dumbbells', 'bench');
+  }
+
+  const activeEq =
+    eqRequested.length > 0 ? eqRequested : profile?.preferredEquipment || [];
+
+  const wantCalisthenics =
+    norm.includes('callisthen') || norm.includes('calisthen') || norm.includes('street');
+
+  let pool = EXERCISE_CATALOG.filter((ex) => {
+    if (wantCalisthenics && ex.discipline !== 'calisthenics' && ex.discipline !== 'bodyweight') {
+      return false;
+    }
+    if (activeEq.length > 0 && !matchesSelectedEquipment(ex.equipmentTags, activeEq)) {
+      return false;
+    }
+    if (requestedMuscles.length > 0 && !requestedMuscles.includes(ex.muscleGroup)) {
+      return false;
+    }
+    return true;
+  });
+
+  if (pool.length < targetCount) {
+    pool = EXERCISE_CATALOG.filter((ex) =>
+      requestedMuscles.length > 0 ? requestedMuscles.includes(ex.muscleGroup) : true
+    );
+  }
+
+  // Sélection variée et équilibrée
+  const selected = [];
+  const usedIds = new Set();
+  if (requestedMuscles.length > 1) {
+    for (let i = 0; selected.length < targetCount && i < 12; i++) {
+      const mKey = requestedMuscles[i % requestedMuscles.length];
+      const candidate = pool.find((e) => e.muscleGroup === mKey && !usedIds.has(e.id));
+      if (candidate) {
+        usedIds.add(candidate.id);
+        selected.push(candidate);
+      }
+    }
+  }
+  for (const ex of pool) {
+    if (selected.length >= targetCount) break;
+    if (!usedIds.has(ex.id)) {
+      usedIds.add(ex.id);
+      selected.push(ex);
+    }
+  }
+
+  if (selected.length === 0) return null;
+
+  const labelMap = {
+    pectoraux: 'Pecs',
+    dos: 'Dos',
+    epaules: 'Épaules',
+    bras: 'Bras',
+    jambes_fessiers: 'Jambes & Fessiers',
+    abdos: 'Core',
+  };
+  const focusTitle =
+    requestedMuscles.length > 0
+      ? requestedMuscles.map((k) => labelMap[k] || k).join(' & ')
+      : wantCalisthenics
+      ? 'Callisthénie'
+      : 'Full Body Athlétique';
+
+  const workoutObj = {
+    id: `ai_wk_${Date.now()}`,
+    title: `Séance IA — ${focusTitle} (${durationMin} min)`,
+    durationMin,
+    targetMuscles: Array.from(new Set(selected.map((s) => s.muscle))).slice(0, 4),
+    equipment: activeEq.length > 0 ? 'Adapté à ton matériel' : 'Tous équipements',
+    exercises: selected,
+  };
+
+  const lines = selected.map(
+    (ex, idx) =>
+      `${idx + 1}. **${ex.name}** — **${ex.sets} × ${ex.type === 'timed' ? `${ex.durationSeconds}s` : `${ex.targetReps} reps`}** *(Repos ${ex.restSeconds}s)*`
+  );
+
+  return {
+    text:
+      `**${workoutObj.title}** construite sur-mesure (${selected.length} mouvements ordonnés par priorité biomécanique) :\n\n` +
+      lines.join('\n') +
+      `\n\n*Conserve 1 à 2 répétitions en réserve (RIR 1–2) sur les premières séries pour tenir tout le volume avec une technique irréprochable.*`,
+    workoutAction: workoutObj,
+    exerciseDemo: selected[0],
+    memory: { lastIntent: 'ai_workout_builder' },
+  };
+}
+
+/**
+ * 3. RECHERCHE TECHNIQUE PRÉCISE D'UN EXERCICE AVEC DÉMONSTRATION ANIMÉE
+ */
+function tryLookupSpecificExercise(norm) {
+  const isTechQuestion =
+    norm.includes('comment faire') ||
+    norm.includes('comment bien') ||
+    norm.includes('executer') ||
+    norm.includes('execution') ||
+    norm.includes('technique') ||
+    norm.includes('posture') ||
+    norm.includes('how to') ||
+    norm.includes('como hacer');
+
+  if (!isTechQuestion && norm.split(' ').length > 5) return null;
+
+  let bestEx = null;
+  let bestScore = 0;
+
+  for (const ex of EXERCISE_CATALOG) {
+    const exNorm = normalizeText(ex.name);
+    const words = exNorm.split(' ').filter((w) => w.length >= 4);
+    let score = 0;
+    if (norm.includes(exNorm)) score += 90;
+    for (const w of words) {
+      if (norm.includes(w)) score += 22;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestEx = ex;
+    }
+  }
+
+  if (!bestEx || bestScore < (isTechQuestion ? 22 : 44)) return null;
+
+  return {
+    text:
+      `**Fiche Technique & Biomécanique — ${bestEx.name}** :\n\n` +
+      `• **Muscles ciblés :** **${bestEx.muscle}**\n` +
+      `• **Exécution stricte :** ${bestEx.cue}\n` +
+      `• **Cadence idéale :** descente contrôlée sur **2 secondes** (phase excentrique), point stable sans rebond, puis poussée/tirage explosif en expirant.\n` +
+      `• **Dosage recommandé :** **${bestEx.sets} séries × ${bestEx.type === 'timed' ? `${bestEx.durationSeconds}s` : `${bestEx.targetReps} reps`}** avec **${bestEx.restSeconds}s de repos**` +
+      (bestEx.alternative ? `\n• **Alternative directe :** *${bestEx.alternative}*` : ''),
+    exerciseDemo: bestEx,
+    memory: { lastIntent: 'exercise_tech' },
+  };
+}
+
+/**
+ * 4. SOLVEUR DE REPAS CALIBRÉ À UNE CIBLE CALORIQUE PRÉCISE (EX: "REPAS À 650 KCAL")
+ */
+function tryComposeTargetedMealFromPrompt(userMessage, norm, profile) {
+  const kcalMatch = String(userMessage).match(/(\d{3,4})\s*kcal/i);
+  if (!kcalMatch) return null;
+
+  const targetKcal = Math.max(200, Math.min(1600, Number(kcalMatch[1])));
+  const adaptedPool = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter((r) =>
+    isRecipeCompatibleWithProfile(r, profile)
+  );
+  if (adaptedPool.length === 0) return null;
+
+  // Vérifie si l'utilisateur mentionne un aliment ou moment précis
+  let bestRec = adaptedPool[0];
+  let bestScore = -1;
+  for (const r of adaptedPool) {
+    let score = 0;
+    const rNorm = normalizeText(
+      `${r.title} ${(r.ingredients || []).map((i) => i.foodId).join(' ')}`
+    );
+    norm
+      .split(' ')
+      .filter((w) => w.length >= 4)
+      .forEach((tok) => {
+        if (rNorm.includes(tok)) score += 15;
+      });
+    const baseM = computeRecipeMacros(r, 1);
+    score -= Math.abs(baseM.kcal - targetKcal) * 0.02;
+    if (score > bestScore) {
+      bestScore = score;
+      bestRec = r;
+    }
+  }
+
+  const baseMacros = computeRecipeMacros(bestRec, 1);
+  const ratio = targetKcal / Math.max(120, baseMacros.kcal);
+  const scaledIngs = bestRec.ingredients.map((ing) => ({
+    foodId: ing.foodId,
+    grams: roundToNearest5g(ing.grams * ratio),
+  }));
+
+  const exactMacros = computeRecipeMacros({ ingredients: scaledIngs }, 1);
+  const ingLines = scaledIngs.map((it) => {
+    const f = getAllFoods().find((x) => x.id === it.foodId);
+    const m = calculateFoodMacros(it.foodId, it.grams);
+    return `• **${it.grams}g ${f?.name || it.foodId}** *(${m.kcal} kcal · ${m.protein}g P)*`;
+  });
+
+  return {
+    text:
+      `**Repas calibré au gramme près pour ${targetKcal} kcal** — **${bestRec.title}** :\n\n` +
+      ingLines.join('\n') +
+      `\n\n**Total exact :** **${exactMacros.kcal} kcal** · **${exactMacros.protein}g P** · **${exactMacros.carbs}g G** · **${exactMacros.fat}g L**`,
+    mealAction: {
+      title: `${bestRec.title} (${exactMacros.kcal} kcal)`,
+      kcal: exactMacros.kcal,
+      protein: exactMacros.protein,
+      items: scaledIngs,
+    },
+    memory: { lastIntent: 'targeted_meal' },
+  };
 }
 
 function getCompatibleProteinFoods(profile) {
@@ -125,143 +545,137 @@ const MUSCLE_GUIDES = [
   {
     keys: ['pectoraux', 'pec', 'pecs', 'poitrine', 'chest', 'bench', 'developpe couche'],
     title: 'Pectoraux (Haut, Moyen & Étirement)',
+    demoId: 'ex_club_incline_smith',
     exercises:
-      '1. **Développé incliné haltères (30°)** : 3–4 × 8–10 reps *(cible le faisceau claviculaire avec grande amplitude)*\n' +
-      '2. **Développé couché ou Presse convergente** : 3 × 6–8 reps *(tension mécanique lourde, 2–3 min repos)*\n' +
+      '1. **Développé incliné haltères ou Smith (30°)** : 3–4 × 8–10 reps *(faisceau claviculaire en grande amplitude)*\n' +
+      '2. **Presse convergente ou Développé couché** : 3 × 6–8 reps *(tension mécanique lourde, 2–3 min repos)*\n' +
       '3. **Écartés poulie vis-à-vis ou Dips buste penché** : 3 × 12–15 reps *(hypertrophie maximale en position étirée)*',
-    tip: 'Resserre légèrement les omoplates en abaissant les épaules et garde un angle de coudes à ~45° pour protéger la coiffe des rotateurs.',
+    tip: 'Resserre légèrement les omoplates en abaissant les épaules et garde un angle de coudes à ~45°.',
   },
   {
     keys: ['dos', 'largeur', 'epaisseur', 'traction', 'tractions', 'rowing', 'dorsaux', 'back', 'lats'],
     title: 'Dos (Largeur en V & Épaisseur)',
+    demoId: 'ex_cali_chest_to_bar',
     exercises:
-      '1. **Tractions pronation ou Tirage vertical prise neutre** : 3–4 × 6–10 reps *(grand dorsal — tire les coudes vers les hanches)*\n' +
-      '2. **Rowing haltère unilatéral ou Rowing poitrine appuyée** : 3–4 × 8–12 reps *(trapèzes moyens & rhomboïdes sans stress lombaire)*\n' +
-      '3. **Face Pull à la corde** : 3 × 15 reps *(santé scapulaire et deltoïde postérieur)*',
+      '1. **Tractions pronation ou Tirage vertical prise neutre** : 3–4 × 6–10 reps *(tire les coudes vers les hanches)*\n' +
+      '2. **Rowing T-Bar ou Rowing haltère unilatéral** : 3–4 × 8–12 reps *(trapèzes moyens & rhomboïdes)*\n' +
+      '3. **Pull-over poulie haute ou Face Pull** : 3 × 15 reps *(finition grand dorsal & santé scapulaire)*',
     tip: 'Laisse tes omoplates s’étirer complètement en haut du mouvement avant chaque tirage (Wolf et al., 2023).',
   },
   {
     keys: ['bras', 'biceps', 'triceps', 'avant bras', 'arms', 'curl'],
     title: 'Bras (Biceps & Triceps — 3 chefs)',
+    demoId: 'ex_ext_bayesian_cable_curl',
     exercises:
-      '1. **Curl incliné haltères (banc 45°) ou Bayesian Curl poulie** : 3 × 10–12 reps *(étire la longue portion du biceps)*\n' +
-      '2. **Extensions triceps poulie au-dessus de la tête (Overhead)** : 3–4 × 10–12 reps *(+40 % d’hypertrophie de la longue portion du triceps selon Maeo et al., 2022)*\n' +
-      '3. **Curl marteau + Pushdown barre droite** : 3 × 12 reps *(brachial & vaste externe)*',
-    tip: 'Verrouille les coudes fixes le long du buste (ou près des oreilles en overhead) et vise 10 à 14 séries directes par semaine.',
+      '1. **Curl incliné haltères ou Bayesian Curl poulie** : 3 × 10–12 reps *(étire la longue portion du biceps)*\n' +
+      '2. **Extensions triceps poulie au-dessus de la tête (Overhead)** : 3–4 × 10–12 reps *(+40 % d’hypertrophie de la longue portion du triceps)*\n' +
+      '3. **Curl marteau corde + Dips serrés** : 3 × 12 reps *(brachial & vaste externe)*',
+    tip: 'Verrouille les coudes fixes et vise 10 à 14 séries directes par semaine.',
   },
   {
     keys: ['epaule', 'epaules', 'deltoide', 'deltoides', 'shoulders', 'elevations laterales'],
     title: 'Épaules 3D (Antérieur, Latéral & Postérieur)',
+    demoId: 'ex_club_machine_lateral_raise',
     exercises:
-      '1. **Développé militaire haltères ou barre** : 3 × 6–10 reps *(force globale de poussée verticale)*\n' +
-      '2. **Élévations latérales à la poulie basse (câble hauteur poignet)** : 4 × 12–15 reps *(tension maximale dès le bas du mouvement)*\n' +
-      '3. **Oiseau poulie ou Face Pull** : 3 × 15 reps *(arrière d’épaule & posture)*',
-    tip: 'Sur les élévations latérales, monte dans le plan scapulaire (~20° vers l’avant) sans hausser les trapèzes.',
+      '1. **Développé militaire haltères ou barre** : 3 × 6–10 reps\n' +
+      '2. **Élévations latérales poulie basse ou machine** : 4 × 12–15 reps *(tension continue dès le bas)*\n' +
+      '3. **Pec-Deck inversé (Oiseau) ou Face Pull** : 3 × 15 reps',
+    tip: 'Monte dans le plan scapulaire (~20° vers l’avant) sans hausser les trapèzes.',
   },
   {
     keys: ['fessier', 'fessiers', 'glutes', 'hip thrust', 'fesses'],
     title: 'Fessiers (Grand, Moyen & Petit Glutéal)',
+    demoId: 'ex_club_machine_hip_thrust',
     exercises:
-      '1. **Hip Thrust barre ou haltère (pause 1s en haut)** : 4 × 8–10 reps *(pic de contraction maximal en extension de hanche)*\n' +
-      '2. **Squat Bulgare buste penché ou Soulevé de terre Roumain (RDL)** : 3 × 8–10 reps *(étirement maximal sous charge)*\n' +
-      '3. **Abduction hanche poulie ou élastique** : 3 × 15 reps *(moyen fessier & galbe latéral)*',
-    tip: 'En Squat Bulgare, penche légèrement le buste vers l’avant avec le tibia avant vertical pour cibler les fessiers plutôt que les quadriceps.',
+      '1. **Hip Thrust barre ou machine (pause 1s en haut)** : 4 × 8–10 reps *(pic de contraction en extension)*\n' +
+      '2. **Squat Bulgare buste penché ou RDL** : 3 × 8–10 reps *(étirement maximal sous charge)*\n' +
+      '3. **Abduction fessiers machine ou poulie** : 3 × 15 reps *(moyen fessier)*',
+    tip: 'En Squat Bulgare, penche légèrement le buste vers l’avant avec le tibia avant vertical.',
   },
   {
     keys: ['jambe', 'jambes', 'quadriceps', 'ischios', 'mollets', 'cuisses', 'squat', 'legs'],
     title: 'Jambes Complètes (Quadriceps, Ischios & Mollets)',
+    demoId: 'ex_ext_hack_squat_machine',
     exercises:
-      '1. **Squat / Hack Squat ou Goblet Squat profond** : 3–4 × 6–10 reps *(flexion complète du genou)*\n' +
-      '2. **Soulevé de terre Roumain (RDL) + Leg Curl assis** : 3 × 8–12 reps *(le Leg Curl assis surpasse le couché grâce à l’étirement des ischios à la hanche)*\n' +
-      '3. **Mollets debout jambes tendues (pause 2s en bas)** : 4 × 10–15 reps',
-    tip: 'Prends 2min30 à 3min de repos sur tes séries de Squat et RDL pour maintenir un recrutement moteur optimal.',
+      '1. **Hack Squat, Presse inclinée ou Squat profond** : 3–4 × 6–10 reps\n' +
+      '2. **Soulevé de terre Roumain (RDL) + Leg Curl assis** : 3 × 8–12 reps\n' +
+      '3. **Mollets debout ou assis (pause 2s en bas)** : 4 × 12–15 reps',
+    tip: 'Le Leg Curl assis surpasse la version allongée grâce au pré-étirement des ischios à la hanche.',
   },
   {
     keys: ['abdo', 'abdos', 'abdominaux', 'ventre plat', 'gainage', 'six pack', 'core', 'abs'],
-    title: 'Sangle Abdominale & Définition Visuelle',
+    title: 'Sangle Abdominale & Gainage Athlétique',
+    demoId: 'ex_cali_roman_leg_raises',
     exercises:
-      '1. **Crunch à la poulie haute ou Relevé de bassin enroulé** : 3 × 10–15 reps *(flexion vertébrale avec surcharge progressive)*\n' +
-      '2. **Gainage McGill (Planche RKC + Pallof Press anti-rotation)** : 3 × 30–45s *(transverse & stabilité lombaire)*\n' +
-      '3. **Visibilité :** la définition des abdos dépend avant tout du taux de masse grasse (~10–14 % homme, ~18–22 % femme) via un léger déficit calorique.',
-    tip: 'On ne peut pas perdre du gras localement sur le ventre : combine déficit modéré (-15 %), 8 500 pas/jour et renforcement lourd.',
+      '1. **Relevés de jambes chaise romaine ou Crunch poulie haute** : 3 × 12–15 reps\n' +
+      '2. **Ab Wheel Rollout ou Planche active RKC** : 3 × 10 reps / 45s\n' +
+      '3. **Définition visuelle :** combine léger déficit (-15 %) et 8 500 pas/jour.',
+    tip: 'Enroule réellement le bassin vers le sternum (et pas seulement les cuisses) pour recruter le grand droit.',
   },
 ];
 
 const INTENT_RULES = [
-  {
-    id: 'greeting',
-    keywords: ['bonjour', 'salut', 'coucou', 'hello', 'hey', 'hola', 'que sais tu faire', 'aide moi'],
-    weight: 3.1,
-  },
+  { id: 'greeting', keywords: ['bonjour', 'salut', 'coucou', 'hello', 'hey', 'hola'], weight: 3.1 },
   {
     id: 'full_day_menu',
     keywords: [
       'menu complet', 'plan repas', 'journee type', 'menu pour la journee',
-      'plan alimentaire', 'full day meal', 'meal plan', 'menu completo', 'plan de comidas',
+      'plan alimentaire', 'full day meal', 'meal plan', 'menu completo',
     ],
-    weight: 5.2,
+    weight: 5.4,
   },
   {
     id: 'peri_workout',
     keywords: [
       'avant seance', 'apres seance', 'avant et apres', 'avant ma seance', 'apres ma seance',
-      'avant le sport', 'apres le sport', 'fenetre anabolique', 'collation pre', 'post workout',
-      'before and after', 'antes y despues',
+      'avant le sport', 'apres le sport', 'fenetre anabolique', 'post workout', 'before and after',
     ],
     weight: 4.8,
   },
-  {
-    id: 'one_rm_calc',
-    keywords: ['1rm', 'max au', 'reps a', 'repetitions a', 'force max'],
-    weight: 4.6,
-  },
+  { id: 'one_rm_calc', keywords: ['1rm', 'max au', 'reps a', 'repetitions a', 'force max'], weight: 4.7 },
   {
     id: 'cardio_zones',
-    keywords: [
-      'zone 2', 'fcmax', 'frequence cardiaque', 'vo2max', 'heart rate', 'zona 2',
-    ],
+    keywords: ['zone 2', 'fcmax', 'frequence cardiaque', 'vo2max', 'heart rate', 'zona 2'],
     weight: 4.6,
   },
   {
     id: 'steps_neat',
-    keywords: ['combien de pas', '10000 pas', '8000 pas', 'neat', 'marche rapide', 'tapis incline', 'daily steps'],
+    keywords: ['combien de pas', '10000 pas', '8000 pas', 'neat', 'marche rapide', 'tapis incline', '12 3 30'],
     weight: 4.5,
   },
   {
     id: 'progressive_overload',
     keywords: [
       'surcharge progressive', 'double progression', 'augmenter les poids', 'augmenter les charges',
-      'comment progresser', 'stagne en force', 'progressive overload',
+      'comment progresser', 'progressive overload',
     ],
     weight: 4.6,
   },
   {
     id: 'warmup_mobility',
-    keywords: ['echauffement', 'echauffer', 'etirement', 'etirements', 'souplesse', 'mobilite', 'warmup', 'stretching'],
+    keywords: ['echauffement', 'echauffer', 'etirement', 'etirements', 'souplesse', 'mobilite', 'warmup'],
     weight: 4.3,
   },
   {
     id: 'cravings_cheat',
     keywords: [
       'fringale', 'faim', 'envie de sucre', 'grignotage', 'cheat meal', 'ecart', 'restaurant',
-      'fast food', 'pizza', 'burger', 'ballonnement', 'digestion', 'fibre', 'fibres',
+      'fast food', 'ballonnement', 'digestion', 'fibre', 'fibres',
     ],
     weight: 4.3,
   },
   {
     id: 'macros_calc',
     keywords: [
-      'calculer mes calories', 'mes calories', 'mes macros', 'metabolisme', 'bmr', 'tdee',
-      'mifflin', 'combien de calories', 'repartition macro',
+      'calculer mes calories', 'mes calories', 'mes macros', 'metabolisme', 'bmr', 'tdee', 'mifflin',
     ],
-    weight: 4.3,
+    weight: 4.4,
   },
   {
     id: 'muscle_anatomy',
     keywords: [
       'pectoraux', 'pecs', 'muscler le dos', 'largeur dos', 'biceps', 'triceps', 'prendre des bras',
-      'epaules', 'deltoides', 'fessiers', 'hip thrust', 'quadriceps', 'ischios', 'mollets',
-      'abdos', 'abdominaux', 'ventre plat',
+      'epaules', 'deltoides', 'fessiers', 'quadriceps', 'ischios', 'mollets', 'abdos', 'abdominaux', 'ventre plat',
     ],
     weight: 4.4,
   },
@@ -271,39 +685,35 @@ const INTENT_RULES = [
       'remplacer', 'remplace', 'equivalent', 'equivalence', 'substituer',
       'alternative', 'echanger', 'swap', 'replace', 'cambiar', 'sustituir',
     ],
-    weight: 4.4,
+    weight: 4.6,
   },
   {
     id: 'supplements',
     keywords: [
       'creatine', 'creatina', 'cafeine', 'caffeine', 'bcaa', 'whey', 'caseine',
       'omega', 'magnesium', 'vitamine', 'collagene', 'complement', 'complements',
-      'supplement', 'supplements', 'suplemento', 'suplementos', 'booster', 'preworkout',
+      'supplement', 'supplements', 'booster', 'preworkout',
     ],
-    weight: 4.1,
+    weight: 4.2,
   },
   {
     id: 'program_choice',
     keywords: [
       'quel programme', 'choisir programme', 'ppl', 'upper lower', 'full body',
-      'combien de seances', 'combien de series', 'split', 'which workout', 'which program',
-      'que programa', 'rutina',
+      'combien de seances', 'combien de series', 'split', 'which program',
     ],
     weight: 4.0,
   },
   {
     id: 'protein_gap',
-    keywords: [
-      'proteine', 'proteines', 'combler', 'manque de prot', 'protein', 'proteina',
-      'proteinas', 'quota',
-    ],
+    keywords: ['proteine', 'proteines', 'combler', 'manque de prot', 'protein', 'proteina', 'quota'],
     weight: 3.7,
   },
   {
     id: 'meal_idea',
     keywords: [
       'que manger', 'quoi manger', 'idee repas', 'ce soir', 'diner', 'dejeuner',
-      'petit dejeuner', 'collation', 'dinner', 'meal idea', 'eat tonight', 'cena', 'comer',
+      'petit dejeuner', 'collation', 'dinner', 'meal idea', 'cena',
     ],
     weight: 3.6,
   },
@@ -312,8 +722,6 @@ const INTENT_RULES = [
     keywords: [
       'douleur', 'douleurs', 'mal a', 'mal au', 'mal aux', 'genou', 'genoux',
       'lombaire', 'lombaires', 'mal de dos', 'coude', 'poignet', 'tendinite', 'blessure',
-      'shoulder pain', 'knee pain', 'back pain', 'joint pain', 'injury',
-      'dolor', 'lesion', 'hombro', 'rodilla', 'espalda',
     ],
     weight: 4.4,
   },
@@ -321,8 +729,7 @@ const INTENT_RULES = [
     id: 'fatigue_sleep',
     keywords: [
       'fatigue', 'epuise', 'creve', 'mal dormi', 'sommeil', 'dormir', 'courbature',
-      'courbatures', 'doms', 'deload', 'flemme', 'pas le temps', '20 min', 'emom',
-      'tired', 'sleep', 'sore', 'cansado', 'sueno', 'agujetas',
+      'courbatures', 'doms', 'deload', 'flemme', 'pas le temps',
     ],
     weight: 3.7,
   },
@@ -331,14 +738,13 @@ const INTENT_RULES = [
     keywords: [
       'seche', 'deficit', 'maigrir', 'perdre du gras', 'plateau', 'stagne',
       'prise de masse', 'surplus', 'grossir', 'jeune', 'intermittent', '16 8', 'alcool',
-      'cardio', 'courir', 'etude', 'science', 'scientifique', 'pubmed', 'issn',
-      'cut', 'bulk', 'fasting', 'study', 'definicion', 'volumen', 'ayuno',
+      'cardio', 'courir', 'etude', 'science',
     ],
     weight: 3.5,
   },
   {
     id: 'hydration',
-    keywords: ['eau', 'hydratation', 'boire', 'crampe', 'electrolytes', 'water', 'hydration', 'agua'],
+    keywords: ['eau', 'hydratation', 'boire', 'crampe', 'electrolytes', 'water', 'hydration'],
     weight: 3.4,
   },
 ];
@@ -379,7 +785,7 @@ function detectTopIntent(normText, previousMemory) {
 }
 
 /**
- * Moteur IA Conversationnel Hors-Ligne Pré-Caché (0 ms, illimité, 20 modules experts, ancré PubMed/ISSN)
+ * Moteur IA Compositionnel Indépendant (0 quota externe, 0 ms, solveur nutritionnel & générateur de séances)
  */
 export function generateCoachResponse(userMessage, context = {}) {
   warmUpCoachEngine();
@@ -411,20 +817,73 @@ export function generateCoachResponse(userMessage, context = {}) {
   const defaultSugs =
     QUICK_COACH_SUGGESTIONS_BY_LANG[lang] || QUICK_COACH_SUGGESTIONS_BY_LANG.fr;
 
+  // PRIORITÉ A : Générateur de séance sur-mesure en langage naturel (ex: "Fais-moi une séance pecs haltères 35 min")
+  const customWorkoutReply = tryComposeCustomWorkoutFromPrompt(userMessage, norm, profile);
+  if (customWorkoutReply) {
+    return {
+      ...customWorkoutReply,
+      sources: retrieveScientificEvidence('volume serie rir entrainement', lang, 2),
+      suggestions: [
+        'Que manger avant et après ma séance ?',
+        'Comment appliquer la surcharge progressive ?',
+        'Menu complet calibré sur mes macros du jour',
+      ],
+    };
+  }
+
+  // PRIORITÉ B : Solveur de repas à cible calorique précise (ex: "Repas du soir à 650 kcal")
+  const targetedMealReply = tryComposeTargetedMealFromPrompt(userMessage, norm, profile);
+  if (targetedMealReply) {
+    return {
+      ...targetedMealReply,
+      sources: retrieveScientificEvidence('proteine repartition repas', lang, 2),
+      suggestions: [
+        'Menu complet calibré sur mes macros du jour',
+        'Par quoi remplacer 80g de riz basmati ?',
+        'Combler mes protéines du jour',
+      ],
+    };
+  }
+
+  // PRIORITÉ C : Recherche technique d'un exercice précis avec animation biomécanique (ex: "Comment bien exécuter le Hip Thrust ?")
+  const techExerciseReply = tryLookupSpecificExercise(norm);
+  if (techExerciseReply) {
+    return {
+      ...techExerciseReply,
+      sources: retrieveScientificEvidence('amplitude etirement biomecanique', lang, 2),
+      suggestions: [
+        'Crée-moi une séance Pecs & Triceps de 35 min',
+        'Comment appliquer la surcharge progressive ?',
+        'Calculer mon 1RM pour 8 reps à 80 kg',
+      ],
+    };
+  }
+
+  // PRIORITÉ D : Calculateur multi-aliments & portions naturelles (ex: "Macros de 3 œufs, 70g d'avoine et 1 banane")
+  const multiFoodReply = tryParseMultiFoodNutritionQuery(userMessage, norm);
+  if (multiFoodReply) {
+    return {
+      ...multiFoodReply,
+      sources: evidence,
+      suggestions: [
+        `Par quoi remplacer ${multiFoodReply.memory.lastGrams}g de cet aliment ?`,
+        'Combler mes protéines du jour',
+        'Menu complet calibré sur mes macros du jour',
+      ],
+    };
+  }
+
   const intent = detectTopIntent(norm, previousMemory);
 
-  // =========================================================================
-  // 0. SALUTATION & CAPACITÉS DU COACH HORS-LIGNE
-  // =========================================================================
   if (intent === 'greeting' && norm.split(' ').length <= 6) {
     return {
       text:
-        `Salut **${profile.name || 'Athlète'}** ! Mon moteur scientifique est **100 % pré-chargé hors-ligne** (25 méta-analyses ISSN/ACSM/PubMed, 151 aliments certifiés, 40 recettes et 7 programmes).\n\n` +
-        `Aujourd'hui il te reste **${Math.max(0, remKcal)} kcal** et **${Math.max(0, remProt)}g de protéines**. Tu peux me demander :\n` +
-        `• Un **menu complet** calibré sur tes macros\n` +
-        `• Par quoi **remplacer n'importe quel aliment** au gramme près\n` +
-        `• Quels exercices cibler (**pecs, dos, bras, fessiers, abdos**), ton **1RM** ou ta **Zone 2 cardio**\n` +
-        `• Quoi manger **avant/après séance** ou quels **compléments** choisir !`,
+        `Salut **${profile.name || 'Athlète'}** ! Je suis ton **Coach IA embarqué** (100 % autonome, sans quota ni limite).\n\n` +
+        `Demande-moi avec précision ce dont tu as besoin :\n` +
+        `• **« Crée-moi une séance dos & bras à la chaise romaine de 35 min »** *(lancement direct en 1 clic)*\n` +
+        `• **« Macros de 3 œufs, 70g d'avoine et 1 banane »** *(calcul exact + ajout au journal)*\n` +
+        `• **« Repas à 650 kcal »** ou **« Menu complet pour mes ${targets.kcal} kcal »**\n` +
+        `• **« Comment exécuter le Hip Thrust / Soulevé de terre ? »** *(avec démonstration animée)*`,
       sources: [SCIENTIFIC_STUDIES[0], SCIENTIFIC_STUDIES[4]].map((s) => ({
         ...s,
         localizedSummary: s.summary[lang] || s.summary.fr,
@@ -434,12 +893,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     };
   }
 
-  // =========================================================================
-  // 1. GÉNÉRATEUR DE JOURNÉE ALIMENTAIRE COMPLÈTE CALIBRÉE SUR LES MACROS
-  // =========================================================================
   if (intent === 'full_day_menu') {
-    const compatible = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter(
-      (r) => isRecipeCompatibleWithProfile(r, profile)
+    const compatible = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter((r) =>
+      isRecipeCompatibleWithProfile(r, profile)
     );
     const pickSlot = (slot, shareKcal) => {
       const pool = compatible.filter((r) => r.mealTypes.includes(slot));
@@ -475,22 +931,15 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Journée alimentaire sur-mesure (${totalK} kcal · ${totalP}g P)** calibrée sur ta cible (${targets.kcal} kcal, filtrée selon tes préférences) :\n\n` +
+        `**Journée alimentaire sur-mesure (${totalK} kcal · ${totalP}g P)** calibrée sur ta cible (${targets.kcal} kcal, adaptée à tes goûts) :\n\n` +
         lines.join('\n') +
-        `\n\n*Selon le consensus ISSN (Jäger et al., 2017), répartir tes protéines sur ces 4 prises maximise l'anabolisme musculaire sur 24h.*`,
+        `\n\n*Consensus ISSN (Jäger et al., 2017) : 4 prises protéiques espacées de 3–4h maximisent la synthèse musculaire sur 24h.*`,
       sources: retrieveScientificEvidence('proteine repartition repas', lang, 2),
-      suggestions: [
-        'Génère-moi un menu complet pour la journée',
-        'Que manger avant et après ma séance ?',
-        'Par quoi remplacer 80g de riz ?',
-      ],
+      suggestions: defaultSugs.slice(0, 4),
       memory: { lastIntent: 'full_day_menu' },
     };
   }
 
-  // =========================================================================
-  // 2. NUTRITION PÉRI-TRAINING (AVANT & APRÈS SÉANCE)
-  // =========================================================================
   if (intent === 'peri_workout') {
     const preCarbs = Math.round(weightKg * 0.8);
     const preProt = Math.round(weightKg * 0.35);
@@ -499,155 +948,100 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Protocole Nutrition Avant & Après Séance pour ${weightKg} kg** *(Aragon & Schoenfeld, 2013 — JISSN)* :\n\n` +
-        `• **1h30 à 2h30 AVANT séance :** vise **~${preCarbs}g de glucides digestes** + **~${preProt}g de protéines** faibles en lipides/fibres *(ex: flocons d'avoine + Skyr/Whey + banane, ou riz basmati + poulet/tofu)*. Si séance dans <30 min : 1 banane mûre ou compote + café.\n` +
-        `• **Dans les 2h APRÈS séance :** vise **~${postProt}g de protéines riches en leucine** + **~${postCarbs}g de glucides** pour recharger le glycogène et stopper le catabolisme.\n` +
-        `• **Règle d'or :** inutile de courir boire un shaker dans les 5 minutes — l'essentiel est de ne pas dépasser **4 à 5h** entre ton repas pré-séance et ton repas post-séance !`,
+        `**Protocole Nutrition Avant & Après Séance (${weightKg} kg)** *(Aragon & Schoenfeld, 2013)* :\n\n` +
+        `• **1h30–2h30 AVANT :** **~${preCarbs}g glucides digestes** + **~${preProt}g protéines** pauvres en graisses *(ex: avoine + Skyr/Whey + banane)*. Si <30 min : 1 banane ou compote.\n` +
+        `• **Dans les 2h APRÈS :** **~${postProt}g protéines** + **~${postCarbs}g glucides** pour recharger le glycogène.\n` +
+        `• **À retenir :** espacer le repas pré-séance et post-séance de **4h maximum** suffit à maximiser 100 % de l'anabolisme.`,
       sources: retrieveScientificEvidence('avant seance apres seance fenetre anabolique', lang, 2),
-      suggestions: [
-        'Combler mes protéines du jour',
-        'Créatine & compléments vraiment utiles ?',
-        'Génère-moi un menu complet pour la journée',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'peri_workout' },
     };
   }
 
-  // =========================================================================
-  // 3. COACHING ANATOMIQUE PAR GROUPE MUSCULAIRE
-  // =========================================================================
   if (intent === 'muscle_anatomy') {
     const foundGuide =
       MUSCLE_GUIDES.find((g) => g.keys.some((k) => norm.includes(k))) || MUSCLE_GUIDES[0];
+    const demoEx = EXERCISE_CATALOG.find((e) => e.id === foundGuide.demoId) || null;
 
     return {
       text:
-        `**Protocole Hypertrophie — ${foundGuide.title}** *(10 à 16 séries/semaine réparties en 2 séances)* :\n\n` +
+        `**Protocole Hypertrophie — ${foundGuide.title}** *(10 à 16 séries/semaine)* :\n\n` +
         `${foundGuide.exercises}\n\n` +
         `**Clé biomécanique :** ${foundGuide.tip}`,
+      exerciseDemo: demoEx,
       sources: retrieveScientificEvidence('amplitude etirement volume serie', lang, 2),
       suggestions: [
+        `Crée-moi une séance ${foundGuide.title.split(' ')[0]} de 40 min`,
         'Comment appliquer la surcharge progressive ?',
-        'Quel programme choisir pour mon objectif ?',
         'Combler mes protéines du jour',
       ],
       memory: { lastIntent: 'muscle_anatomy' },
     };
   }
 
-  // =========================================================================
-  // 4. SURCHARGE PROGRESSIVE & DÉBLOCAGE DE PLATEAU EN MUSCULATION
-  // =========================================================================
   if (intent === 'progressive_overload') {
     return {
       text:
-        `**La méthode scientifique n°1 : La Double Progression** *(Plotkin et al., 2022 — PeerJ)* :\n\n` +
-        `1. **Choisis une fourchette de répétitions**, par exemple **3 séries de 8 à 12 reps** avec une charge où il te reste 1 à 2 reps en réserve (RIR 1–2).\n` +
-        `2. **Séance après séance, garde le MÊME poids** et essaie de gagner +1 répétition par série *(ex: 9-8-8 → 10-10-9 → 12-12-12)*.\n` +
-        `3. **Dès que tu valides le haut de la fourchette** sur toutes tes séries *(3 × 12 propres)*, augmente la charge de **+2,5 kg** *(ou +1 kg sur les élévations/bras)* à la séance suivante et repars à 8 reps !\n\n` +
-        `*Si tu bloques 3 semaines de suite sur un exercice : vérifie tes temps de repos (2–3 min), ton sommeil, ou change de variante pendant 6 semaines.*`,
+        `**La Double Progression Scientifique** *(Plotkin et al., 2022 — PeerJ)* :\n\n` +
+        `1. Fixe une fourchette, ex: **3 × 8 à 12 reps** à RIR 1–2.\n` +
+        `2. Garde la **même charge** d'une séance à l'autre en gagnant +1 rep par série *(9-8-8 → 11-10-10 → 12-12-12)*.\n` +
+        `3. Dès que **3 × 12** est validé proprement, monte de **+2,5 kg** *(+1 kg sur l'isolation)* et repars à 8 reps.`,
       sources: retrieveScientificEvidence('surcharge double progression rir', lang, 2),
-      suggestions: [
-        'Calculer mon 1RM pour 8 reps à 80 kg',
-        'Quel programme choisir pour mon objectif ?',
-        'Que manger avant et après ma séance ?',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'progressive_overload' },
     };
   }
 
-  // =========================================================================
-  // 5. ÉCHAUFFEMENT & MOBILITÉ PRÉ-SÉANCE
-  // =========================================================================
   if (intent === 'warmup_mobility') {
     return {
       text:
-        `**Échauffement Optimal en 8 minutes avant Musculation** *(Behm et al., 2016)* :\n\n` +
-        `• **1. Thermogenèse (3 min) :** rameur, vélo ou marche inclinée légère pour monter la température synoviale.\n` +
-        `• **2. Mobilité dynamique (2 min) :** dislocations d'épaules élastique, ouverture thoracique, squats poids du corps *(zéro étirement statique long >60s avant de pousser lourd, cela réduit la force de ~5 % !)*.\n` +
-        `• **3. Gammes montantes sur ton 1er exercice (3 min) :**\n` +
-        `  – Série 1 : **50 %** de ta charge de travail × 8 reps\n` +
-        `  – Série 2 : **75 %** × 4 reps\n` +
-        `  – Série 3 : **90 %** × 1 à 2 reps explosives → Repos 2 min puis attaque ta 1re vraie série !`,
+        `**Échauffement Salle en 8 minutes** *(Behm et al., 2016)* :\n\n` +
+        `• **3 min cardio progressif** (rameur/tapis incliné) + **2 min mobilité articulaire dynamique** *(aucun étirement statique long >60s avant les charges lourdes)*.\n` +
+        `• **3 séries de chauffe sur ton 1er polyarticulaire :** **50 % × 8 reps** → **75 % × 4 reps** → **90 % × 1–2 reps explosives**, repos 2 min puis 1re série effective.`,
       sources: retrieveScientificEvidence('echauffement etirement mobilite', lang, 2),
-      suggestions: [
-        'Comment appliquer la surcharge progressive ?',
-        'J’ai une gêne à l’épaule ou aux lombaires',
-        'Quel programme choisir pour mon objectif ?',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'warmup_mobility' },
     };
   }
 
-  // =========================================================================
-  // 6. PAS QUOTIDIENS (NEAT) & DÉPENSE CALORIQUE DOUCE
-  // =========================================================================
   if (intent === 'steps_neat') {
     const kcalPer8k = Math.round(weightKg * 4.2);
     return {
       text:
-        `**Le levier secret de la sèche : le NEAT (Pas quotidiens)** *(Paluch et al., 2022 — The Lancet)* :\n\n` +
-        `• À ton poids (**${weightKg} kg**), marcher **8 000 à 10 000 pas/jour** brûle environ **~${kcalPer8k} kcal supplémentaires** chaque jour, soit l'équivalent de **~1,2 kg de tissu adipeux par mois** sans aucune fatigue nerveuse ni faim rebond !\n` +
-        `• **Astuce gain de temps :** 10 minutes de marche digestive après chacun des 3 repas lissent le pic glycémique de ~22 % et ajoutent déjà **3 500 pas** sans effort.\n` +
-        `• **En salle :** la marche sur tapis incliné *(pente 10–12 %, vitesse 4,8 km/h, sans se tenir)* est idéale en fin de séance (20 min).`,
+        `**Dépense NEAT & Pas Quotidiens (${weightKg} kg)** *(Paluch et al., 2022 — The Lancet)* :\n\n` +
+        `• Viser **8 000 à 10 000 pas/jour** brûle **~${kcalPer8k} kcal/j** supplémentaires (~1,2 kg de gras/mois) sans creuser ta récupération nerveuse.\n` +
+        `• En salle : protocole **Marche Inclinée Zone 2** *(pente 10–12 %, 4,8 km/h, 20–30 min après la muscu)*.`,
       sources: retrieveScientificEvidence('pas marche neat cardio', lang, 2),
-      suggestions: [
-        'Calculer ma Zone 2 cardio & VO2max',
-        'Génère-moi un menu complet pour la journée',
-        'Comment gérer une fringale ou un restaurant ?',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'steps_neat' },
     };
   }
 
-  // =========================================================================
-  // 7. GESTION DES FRINGALES, CHEAT MEAL, RESTAURANT & SATIÉTÉ
-  // =========================================================================
   if (intent === 'cravings_cheat') {
     return {
       text:
-        `**Protocole Anti-Fringale & Gestion d'Écart Sans Culpabilité** *(Reynolds et al., 2019 — The Lancet)* :\n\n` +
-        `• **1. En cas de faim le soir :** combine **protéines lentes + fibres volumineuses** *(ex: 200g Skyr 0 % ou Yaourt grec + 100g fruits rouges surgelés + 10g amandes = ~230 kcal, satiété maximale)*.\n` +
-        `• **2. Les 3 champions de l'indice de satiété (Holt, 1995) :** la **pomme de terre vapeur/four** (3,2x plus rassasiante que le pain blanc à calories égales !), les **flocons d'avoine** et le **poisson blanc / blanc de volaille**.\n` +
-        `• **3. Restaurant / Cheat Meal prévu :** ne saute jamais tous tes repas de la journée (risque de compulsion). Fais un déjeuner **riche en protéines et légumes** (léger en graisses), profite pleinement de ton repas le soir, bois 500 ml d'eau et reprends ton plan normal dès le lendemain matin *(le poids en plus le lendemain est à 90 % de l'eau liée au glycogène et au sel, pas du gras !)*`,
+        `**Satiété & Gestion de Restaurant / Écart** *(Reynolds et al., 2019 — The Lancet)* :\n\n` +
+        `• **Collation coupe-faim (~220 kcal) :** 200g Skyr 0 % + 100g fruits rouges + 10g amandes (protéines lentes + fibres).\n` +
+        `• **Restaurant prévu ce soir :** fais un déjeuner riche en protéines maigres et légumes verts, profite sereinement de ton dîner, hydrate-toi bien et reprends ta routine normale demain matin.`,
       sources: retrieveScientificEvidence('faim fringale satiete fibre', lang, 2),
-      suggestions: [
-        'Par quoi remplacer 80g de riz ?',
-        'Combler mes protéines du jour',
-        'Génère-moi un menu complet pour la journée',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'cravings_cheat' },
     };
   }
 
-  // =========================================================================
-  // 8. EXPLICATION DÉTAILLÉE DU MÉTABOLISME & DES MACROS DU PROFIL
-  // =========================================================================
   if (intent === 'macros_calc') {
     const calc = calculateNutritionalTargets(profile);
     return {
       text:
-        `**Ton Bilan Métabolique Exact (Équation de Mifflin-St Jeor)** :\n\n` +
-        `• **Métabolisme de base au repos (BMR) :** **${calc.bmr} kcal/j**\n` +
-        `• **Dépense totale de maintien (TDEE) :** **${calc.tdee} kcal/j**\n` +
-        `• **Ta cible active (${profile.goal === 'cut' ? 'Sèche -18 %' : profile.goal === 'bulk' ? 'Prise de muscle +12 %' : 'Maintien / Recomp.'}) :** **${targets.kcal} kcal/j**\n` +
-        `  – **Protéines :** **${targets.protein}g** *(${(targets.protein / weightKg).toFixed(1)} g/kg — construction musculaire)*\n` +
-        `  – **Lipides :** **${targets.fat}g** *(${(targets.fat / weightKg).toFixed(1)} g/kg — équilibre hormonal)*\n` +
-        `  – **Glucides :** **${targets.carbs}g** *(carburant d'entraînement)*\n` +
-        `  – **Hydratation :** **${targets.waterMl} ml/j**`,
+        `**Bilan Métabolique Exact (Mifflin-St Jeor)** :\n\n` +
+        `• **Métabolisme au repos (BMR) :** **${calc.bmr} kcal/j** · **Maintien (TDEE) :** **${calc.tdee} kcal/j**\n` +
+        `• **Cible active :** **${targets.kcal} kcal/j** → **${targets.protein}g P** *(${(targets.protein / weightKg).toFixed(1)} g/kg)* · **${targets.carbs}g G** · **${targets.fat}g L** · **${targets.waterMl} ml d'eau**.`,
       sources: retrieveScientificEvidence('metabolisme mifflin calorie proteine', lang, 2),
-      suggestions: [
-        'Génère-moi un menu complet pour la journée',
-        'Combler mes protéines du jour',
-        'Combien de pas par jour (NEAT) ?',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'macros_calc' },
     };
   }
 
-  // =========================================================================
-  // 9. CALCULATEUR 1RM PAR CHAT
-  // =========================================================================
   if (intent === 'one_rm_calc') {
     const nums =
       String(userMessage)
@@ -659,61 +1053,50 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Calcul de Force Max (Formule d'Epley)** pour **${reps} reps à ${load} kg** :\n\n` +
-        `• **1RM estimé :** **${est1Rm} kg**\n` +
-        `• **Zone Force (85 % — 4 à 6 reps) :** **${Math.round(est1Rm * 0.85)} kg**\n` +
-        `• **Zone Hypertrophie (75 % — 8 à 12 reps) :** **${Math.round(est1Rm * 0.75)} kg**\n` +
-        `• **Zone Technique / Tempo (65 %) :** **${Math.round(est1Rm * 0.65)} kg**\n\n` +
-        `*Garde 1 à 2 répétitions en réserve (RIR 1–2) et 2 à 3 min de repos sur tes polyarticulaires.*`,
+        `**Force Max (Équation d'Epley)** pour **${reps} reps à ${load} kg** :\n\n` +
+        `• **1RM théorique :** **${est1Rm} kg**\n` +
+        `• **Force (85 % — 4–6 reps) :** **${Math.round(est1Rm * 0.85)} kg**\n` +
+        `• **Hypertrophie (75 % — 8–12 reps) :** **${Math.round(est1Rm * 0.75)} kg**\n` +
+        `• **Endurance / Technique (65 %) :** **${Math.round(est1Rm * 0.65)} kg**`,
       sources: retrieveScientificEvidence('repos force serie rir', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'one_rm_calc' },
     };
   }
 
-  // =========================================================================
-  // 10. ZONES CARDIAQUES (TANAKA) & CARDIO + MUSCULATION
-  // =========================================================================
   if (intent === 'cardio_zones') {
     const fcMax = Math.round(208 - 0.7 * ageYears);
-    const z2Low = Math.round(fcMax * 0.65);
-    const z2High = Math.round(fcMax * 0.75);
-    const z4Low = Math.round(fcMax * 0.85);
-    const z4High = Math.round(fcMax * 0.92);
-
     return {
       text:
-        `**Tes Zones Cardiaques Personnalisées** *(équation de Tanaka : FCmax ≈ **${fcMax} bpm** à ${ageYears} ans)* :\n\n` +
-        `• **Zone 2 (Endurance fondamentale & Oxydation des lipides) :** **${z2Low} à ${z2High} bpm** *(tu dois pouvoir parler en phrases complètes — idéal 2 à 3x 30–45 min/sem)*\n` +
-        `• **Zone 4–5 (VO2max / HIIT) :** **${z4Low} à ${z4High} bpm** *(intervalles courts type 30s/30s ou 4x4 min)*\n\n` +
-        `**Musculation + Cardio :** selon la méta-analyse de *Schumann et al. (2022)*, faire ton cardio **après** la musculation ou un autre jour n'entrave aucunement la prise de muscle !`,
+        `**Zones Cardiaques Tanaka (${ageYears} ans → FCmax ≈ ${fcMax} bpm)** :\n\n` +
+        `• **Zone 2 (Oxydation lipidique & mitochondries) :** **${Math.round(fcMax * 0.65)} à ${Math.round(fcMax * 0.75)} bpm**\n` +
+        `• **Zone 4–5 (VO2max / HIIT) :** **${Math.round(fcMax * 0.85)} à ${Math.round(fcMax * 0.92)} bpm**`,
       sources: retrieveScientificEvidence('cardio zone 2 hiit', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'cardio_zones' },
     };
   }
 
-  // =========================================================================
-  // 11. SUBSTITUTION MATHÉMATIQUE D'ALIMENTS
-  // =========================================================================
   if (intent === 'substitution' || intent === 'substitution_followup') {
     const isIso = norm.includes('iso') || norm.includes('calori') || norm.includes('kcal');
     const mode = isIso ? 'iso_kcal' : 'dominant_macro';
 
     let targetFood = null;
-    let grams = extractGramsFromText(userMessage);
+    let grams = null;
 
     if (intent === 'substitution_followup' && previousMemory?.lastFoodId) {
       targetFood = getAllFoods().find((f) => f.id === previousMemory.lastFoodId);
-      if (!grams) grams = previousMemory.lastGrams || targetFood?.defaultGrams || 100;
+      grams = extractGramsSmart(userMessage, targetFood);
     } else {
-      const phrase = extractCandidateFoodPhrase(norm);
-      targetFood = findFoodByQuery(phrase) || findFoodByQuery(norm);
-      if (!grams && targetFood) grams = targetFood.defaultGrams || 100;
+      const cleaned = cleanFoodSearchPhrase(
+        norm.replace(/\b(remplacer|remplace|substituer|equivalent|par|quoi|swap|replace)\b/g, ' ')
+      );
+      targetFood = findFoodByQuery(cleaned) || findFoodByQuery(norm);
+      if (targetFood) grams = extractGramsSmart(userMessage, targetFood);
     }
 
     if (targetFood) {
-      const result = computeSubstitutions(targetFood, grams, mode, profile);
+      const result = computeSubstitutions(targetFood, grams || 100, mode, profile);
       const topAlts = (result?.alternatives || []).slice(0, 4);
 
       if (topAlts.length > 0) {
@@ -724,7 +1107,7 @@ export function generateCoachResponse(userMessage, context = {}) {
 
         return {
           text:
-            `Équivalences exactes pour **${result.sourceGrams}g de ${targetFood.name}** *(${result.sourceMacros.kcal} kcal, ${result.sourceMacros.protein}g P, ${result.sourceMacros.carbs}g G)* en mode **${result.equivalenceLabel}** :\n\n` +
+            `Équivalences pour **${result.sourceGrams}g de ${targetFood.name}** *(${result.sourceMacros.kcal} kcal, ${result.sourceMacros.protein}g P, ${result.sourceMacros.carbs}g G)* en mode **${result.equivalenceLabel}** :\n\n` +
             lines.join('\n'),
           sources: evidence,
           suggestions: [
@@ -742,228 +1125,166 @@ export function generateCoachResponse(userMessage, context = {}) {
     }
   }
 
-  // =========================================================================
-  // 12. COMPLÉMENTS ALIMENTAIRES (CRÉATINE, CAFÉINE, WHEY, BCAA, OMÉGA-3...)
-  // =========================================================================
   if (intent === 'supplements') {
     const creatDose = Math.max(3, Math.min(5, Math.round(weightKg * 0.05)));
-    const caffLow = Math.round(weightKg * 3);
-    const caffHigh = Math.round(weightKg * 5);
-
     return {
       text:
-        `**Hiérarchie scientifique des compléments pour ton poids (${weightKg} kg)** *(Consensus ISSN & CIO)* :\n\n` +
-        `**1. Preuve scientifique maximale (Niveau A) :**\n` +
-        `• **Créatine Monohydrate :** **${creatDose}g/jour** tous les jours au cours d'un repas (aucune phase de charge requise, sûre à long terme).\n` +
-        `• **Protéine en poudre (Whey Isolate ou Pois/Riz) :** pratique uniquement pour atteindre tes **${targets.protein}g P/j**.\n` +
-        `• **Caféine :** **${caffLow} à ${caffHigh} mg** 45 min avant une grosse séance (éviter après 16h pour protéger ton sommeil profond).\n\n` +
-        `**2. Santé & Récupération :** **Vitamine D3** (en automne/hiver), **Oméga-3** (1–2g EPA/DHA si <2 poissons gras/sem) et **Magnésium bisglycinate** le soir.\n` +
-        `**3. Inutiles si ton alimentation est carrée :** *BCAA isolés* et *brûleurs de graisse* (Wolfe, 2017).`,
+        `**Compléments validés pour ${weightKg} kg (Consensus ISSN & CIO)** :\n\n` +
+        `• **Créatine Monohydrate :** **${creatDose}g/jour** tous les jours au repas (Niveau A).\n` +
+        `• **Caféine :** **${Math.round(weightKg * 3)}–${Math.round(weightKg * 5)} mg** 45 min pré-séance (éviter <6h avant sommeil).\n` +
+        `• **Whey / Protéine végétale :** uniquement par praticité pour boucler tes **${targets.protein}g P/j**.\n` +
+        `• **Santé :** Vitamine D3, Oméga-3 (1–2g EPA/DHA) & Magnésium bisglycinate. *(BCAA superflus si quota protéique atteint).*`,
       sources: retrieveScientificEvidence('creatine cafeine bcaa omega', lang, 2),
-      suggestions: [
-        'Combler mes protéines du jour',
-        'Que manger avant et après ma séance ?',
-        'Quel programme choisir pour mon objectif ?',
-      ],
+      suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'supplements' },
     };
   }
 
-  // =========================================================================
-  // 13. CHOIX DE PROGRAMME & STRUCTURE D'ENTRAÎNEMENT
-  // =========================================================================
   if (intent === 'program_choice') {
     return {
       text:
-        `**Quel programme choisir selon tes disponibilités** *(Schoenfeld et al., 2017 : viser 10–20 séries/muscle/semaine en stimulant chaque muscle 2x/sem)* :\n\n` +
-        `• **2 à 3 séances/semaine → Full Body Poids du Corps** ou **Haltères & Kettlebell Maison** *(chaque muscle est stimulé 3x/semaine, rendement maximal)*.\n` +
-        `• **4 séances/semaine → Upper / Lower (Haut / Bas)** *(le meilleur compromis force, hypertrophie et récupération nerveuse)*.\n` +
-        `• **5 à 6 séances/semaine → Push / Pull / Legs (PPL)** *(idéal pour spécialiser le volume d'hypertrophie en salle)*.\n` +
-        `• **Jours chargés ou récupération → HIIT & Core (20 min)** ou **Mobilité & Big 3 McGill** *(tous disponibles dans l'onglet Séances : ${WORKOUT_PROGRAMS.length} programmes prêts !)*`,
+        `**Structure optimale selon ta fréquence (${WORKOUT_PROGRAMS.length} programmes prêts dans l'onglet Séances)** :\n\n` +
+        `• **2–3x / sem :** *Full Body Poids du Corps*, *Anneaux/TRX* ou *Haltères Maison*\n` +
+        `• **3–4x / sem :** *Callisthénie & Chaise Romaine*, *Full Élastiques* ou *Upper / Lower*\n` +
+        `• **5–6x / sem :** *Push / Pull / Legs (PPL)*\n\n` +
+        `*Tu peux aussi me dire : « Crée-moi une séance [muscles] avec [matériel] de [X] min » !*`,
       sources: retrieveScientificEvidence('volume serie programme entrainement', lang, 2),
       suggestions: [
-        'Comment appliquer la surcharge progressive ?',
-        'Quels exercices pour muscler les pectoraux ?',
-        'Quels exercices pour muscler le dos ?',
+        'Crée-moi une séance Pecs & Triceps de 35 min',
+        'Crée-moi une séance Dos & Bras chaise romaine de 30 min',
+        'Menu complet calibré sur mes macros du jour',
       ],
       memory: { lastIntent: 'program_choice' },
     };
   }
 
-  // =========================================================================
-  // 14. COMBLER LES PROTÉINES DU JOUR
-  // =========================================================================
   if (intent === 'protein_gap') {
     if (remProt <= 5) {
       return {
-        text:
-          `Objectif protéique atteint (**${Math.round(todayMacros.protein)}g / ${targets.protein}g**) ! Ta synthèse protéique musculaire est pleinement stimulée. Pense simplement aux **${remWater} ml d'eau** restants d'ici ce soir.`,
+        text: `Cible protéique atteinte (**${Math.round(todayMacros.protein)}g / ${targets.protein}g**) ! Il te reste **${remWater} ml d'eau** à boire d'ici ce soir.`,
         sources: evidence,
-        suggestions: defaultSugs.slice(2, 5),
+        suggestions: defaultSugs.slice(0, 3),
         memory: { lastIntent: 'protein_gap' },
       };
     }
 
-    const protGap = Math.min(60, Math.max(18, remProt));
+    const protGap = Math.min(60, Math.max(20, remProt));
     const candidates = getCompatibleProteinFoods(profile);
-    const picks = [
-      'skyr_0',
-      'poulet_blanc',
-      'tofu_ferme',
-      'thon_naturel',
-      'whey_isolate',
-      'proteine_vegan_poudre',
-    ]
+    const picks = ['skyr_0', 'poulet_blanc', 'tofu_ferme', 'thon_naturel', 'whey_isolate', 'petit_suisse_faisselle_0']
       .map((id) => candidates.find((c) => c.id === id))
       .filter(Boolean)
       .slice(0, 3);
 
     const optLines = picks.map((food) => {
-      const g = roundToNearest5g(
-        Math.min(350, Math.max(25, (protGap / food.per100g.protein) * 100))
-      );
+      const g = roundToNearest5g(Math.min(350, Math.max(25, (protGap / food.per100g.protein) * 100)));
       const m = calculateFoodMacros(food, g);
       return `• **${g}g ${food.name}** → **+${m.protein}g P** (${m.kcal} kcal)`;
     });
 
     return {
       text:
-        `Il te reste **${remProt}g de protéines** à couvrir aujourd'hui (${Math.max(0, remKcal)} kcal disponibles). Selon le seuil de leucine **ISSN (20–40g P/prise)**, voici 3 options immédiates adaptées à tes filtres :\n\n` +
+        `Il te manque **${remProt}g de protéines** aujourd'hui (${Math.max(0, remKcal)} kcal disponibles). Voici 3 options immédiates :\n\n` +
         optLines.join('\n'),
+      mealAction: picks[0]
+        ? (() => {
+            const g = roundToNearest5g(
+              Math.min(300, Math.max(30, (protGap / picks[0].per100g.protein) * 100))
+            );
+            const m = calculateFoodMacros(picks[0], g);
+            return {
+              title: `Boost Protéines (${picks[0].name})`,
+              kcal: m.kcal,
+              protein: m.protein,
+              items: [{ foodId: picks[0].id, grams: g }],
+            };
+          })()
+        : undefined,
       sources: evidence,
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'protein_gap' },
     };
   }
 
-  // =========================================================================
-  // 15. IDÉES REPAS / COLLATIONS
-  // =========================================================================
   if (intent === 'meal_idea') {
-    const budget = remKcal > 220 ? remKcal : Math.round(targets.kcal * 0.3);
-    const compatible = RECIPES_DATA.filter((r) => isRecipeCompatibleWithProfile(r, profile));
-    const topRecs = compatible
-      .map((r) => {
-        const m = computeRecipeMacros(r, 1);
-        return { r, m, diff: Math.abs(m.kcal - Math.min(budget, 750)) };
-      })
-      .sort((a, b) => a.diff - b.diff)
-      .slice(0, 3);
-
-    const lines = topRecs.map(
-      ({ r, m }) =>
-        `• **${r.title}** *(${r.prepMinutes} min)* → **${m.kcal} kcal** | **${m.protein}g P** · ${m.carbs}g G · ${m.fat}g L`
+    const budget = remKcal > 240 ? Math.min(850, remKcal) : Math.round(targets.kcal * 0.32);
+    return (
+      tryComposeTargetedMealFromPrompt(`${budget} kcal ${userMessage}`, norm, profile) || {
+        text: `Il te reste **${Math.max(0, remKcal)} kcal** et **${Math.max(0, remProt)}g P** aujourd'hui.`,
+        sources: evidence,
+        suggestions: defaultSugs.slice(0, 3),
+      }
     );
-
-    return {
-      text:
-        `Avec **${Math.max(0, remKcal)} kcal** et **${Math.max(0, remProt)}g P** restants aujourd'hui, voici 3 recettes équilibrées prêtes dans ton onglet **Repas** :\n\n` +
-        lines.join('\n'),
-      sources: evidence,
-      suggestions: defaultSugs.slice(0, 3),
-      memory: { lastIntent: 'meal_idea' },
-    };
   }
 
-  // =========================================================================
-  // 16. DOULEURS ARTICULAIRES & BIOMÉCANIQUE
-  // =========================================================================
   if (intent === 'joint_pain') {
     return {
       text:
-        `**Adaptation biomécanique immédiate** *(sans forcer sur une douleur aiguë — consulte un kiné/médecin si gêne persistante au repos)* :\n\n` +
-        `• **Épaule :** remplace la barre droite par des **haltères prise neutre** dans le plan scapulaire (coudes à 35°) ou du **Floor Press**, et intègre du *Face Pull*.\n` +
-        `• **Genou :** remplace les sauts et fentes avant par des **fentes arrière contrôlées** (tibia vertical), du **Hip Thrust** ou un tempo lent (3s descente).\n` +
-        `• **Bas du dos (Lombaires) :** privilégie le **Rowing appuyé sur banc**, le **Squat Bulgare** et le protocole **Big 3 de McGill** disponible dans l'onglet Séances.`,
+        `**Adaptation Biomécanique Sans Douleur** *(consulte un professionnel de santé si douleur aiguë)* :\n\n` +
+        `• **Épaule :** privilégie la **prise neutre aux haltères** dans le plan scapulaire (coudes 35°), le *Floor Press* et le *Face Pull*.\n` +
+        `• **Genou :** remplace les sauts/fentes avant par des **fentes arrière contrôlées** (tibia vertical), du **Hip Thrust** et de la **Chaise isométrique au mur**.\n` +
+        `• **Lombaires :** **Rowing poitrine appuyée**, **Presse/Squat Bulgare** et protocole **Big 3 de McGill**.`,
       sources: retrieveScientificEvidence('douleur lombaire epaule genou mcgill', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'joint_pain' },
     };
   }
 
-  // =========================================================================
-  // 17. FATIGUE, SOMMEIL, COURBATURES & MANQUE DE TEMPS
-  // =========================================================================
   if (intent === 'fatigue_sleep') {
     return {
       text:
-        `**Autorégulation intelligente de ta séance :**\n\n` +
-        `• **Si tu es fatigué ou as peu dormi :** active le bouton **« Énergie basse (-25 %) »** dans l'onglet Séances et reste à 2 répétitions de l'échec (*Refalo et al., 2023*). Tu maintiens 100 % de tes acquis sans creuser ta fatigue nerveuse.\n` +
-        `• **Si tu n'as que 15–20 min :** enchaîne en **Superset antagoniste** (1 série Poussée + 1 série Tirage, 60s repos) ou lance la séance **HIIT & Core 20 min**.\n` +
-        `• **Courbatures (DOMS) :** 20 min de marche active + **${targets.protein}g P** + **${(targets.waterMl / 1000).toFixed(1)} L d'eau** accélèrent la récupération bien mieux que l'immobilité.`,
+        `**Autorégulation de la Séance (Fatigue / Sommeil court)** :\n\n` +
+        `• Active le mode **« -25 % »** dans l'onglet Séances et arrête tes séries à **RIR 2** (*Refalo et al., 2023*) : tu préserves 100 % du signal musculaire sans épuiser ton système nerveux central.\n` +
+        `• Si tu n'as que 20 min : dis-moi *« Crée-moi une séance de 20 min »* !`,
       sources: retrieveScientificEvidence('sommeil fatigue courbature rir', lang, 2),
-      suggestions: defaultSugs.slice(0, 3),
+      suggestions: ['Crée-moi une séance Full Body de 20 min', ...defaultSugs.slice(0, 2)],
       memory: { lastIntent: 'fatigue_sleep' },
     };
   }
 
-  // =========================================================================
-  // 18. SÈCHE, PRISE DE MASSE, JEÛNE, HYDRATATION & ÉTUDES SCIENTIFIQUES
-  // =========================================================================
   if (intent === 'fatloss_bulk_science' || intent === 'hydration') {
     const main = evidence[0];
     const sec = evidence[1];
     return {
       text:
-        `**Synthèse scientifique appliquée à ton profil (${weightKg} kg · cible ${targets.kcal} kcal) :**\n\n` +
+        `**Réponse Scientifique Personnalisée (${weightKg} kg · ${targets.kcal} kcal/j) :**\n\n` +
         `• **${main.citation}** : ${main.localizedSummary}\n` +
         (sec ? `• **${sec.citation}** : ${sec.localizedSummary}\n` : '') +
-        `\n**En pratique aujourd'hui :** il te reste **${Math.max(0, remKcal)} kcal**, **${Math.max(0, remProt)}g de protéines** et **${remWater} ml d'eau** à répartir sereinement.`,
+        `\n**Aujourd'hui :** il te reste **${Math.max(0, remKcal)} kcal**, **${Math.max(0, remProt)}g P** et **${remWater} ml d'eau**.`,
       sources: evidence,
       suggestions: defaultSugs.slice(0, 4),
       memory: { lastIntent: intent },
     };
   }
 
-  // =========================================================================
-  // 19. TENTATIVE DE DÉTECTION D'ALIMENT MÊME SANS MOT "REMPLACER"
-  // =========================================================================
-  const directFoodHit = findFoodByQuery(extractCandidateFoodPhrase(norm));
-  if (directFoodHit && norm.length <= 45) {
-    const g = extractGramsFromText(userMessage) || directFoodHit.defaultGrams || 100;
-    const macros = calculateFoodMacros(directFoodHit, g);
-    const swap = computeSubstitutions(directFoodHit, g, 'dominant_macro', profile);
-    const top2 = (swap?.alternatives || []).slice(0, 2);
-
+  // Repli intelligent : vérifie d'abord si la question porte sur un aliment isolé
+  const cleanedSingle = cleanFoodSearchPhrase(norm);
+  const directFood = cleanedSingle ? findFoodByQuery(cleanedSingle) : null;
+  if (directFood) {
+    const g = extractGramsSmart(userMessage, directFood);
+    const m = calculateFoodMacros(directFood, g);
     return {
       text:
-        `**Valeurs nutritionnelles pour ${g}g de ${directFoodHit.name}** *(${directFoodHit.state})* :\n\n` +
-        `• **Énergie :** **${macros.kcal} kcal**\n` +
-        `• **Macros :** **${macros.protein}g Protéines** · **${macros.carbs}g Glucides** · **${macros.fat}g Lipides**\n` +
-        (top2.length > 0
-          ? `\n**Équivalences directes :** ${top2.map((a) => `**${a.grams}g ${a.food.name}** (${a.macros.kcal} kcal)`).join(' ou ')}.`
-          : ''),
-      sources: evidence,
-      suggestions: [
-        `Par quoi remplacer ${g}g de ${directFoodHit.name} ?`,
-        'Combler mes protéines du jour',
-        'Génère-moi un menu complet pour la journée',
-      ],
-      memory: {
-        lastIntent: 'substitution',
-        lastFoodId: directFoodHit.id,
-        lastGrams: g,
+        `**${g}g de ${directFood.name}** *(${directFood.state})* apportent :\n\n` +
+        `• **${m.kcal} kcal** · **${m.protein}g Protéines** · **${m.carbs}g Glucides** · **${m.fat}g Lipides** *(Fibres : ${m.fiber}g)*`,
+      mealAction: {
+        title: directFood.name,
+        kcal: m.kcal,
+        protein: m.protein,
+        items: [{ foodId: directFood.id, grams: g }],
       },
+      sources: evidence,
+      suggestions: [`Par quoi remplacer ${g}g de ${directFood.name} ?`, ...defaultSugs.slice(0, 2)],
+      memory: { lastIntent: 'substitution', lastFoodId: directFood.id, lastGrams: g },
     };
   }
 
-  // =========================================================================
-  // 20. RÉPONSE OUVERTE SCIENTIFIQUE CONTEXTUALISÉE (0 MS)
-  // =========================================================================
-  const workouts7d = workoutHistory.filter(
-    (w) => Date.now() - new Date(w.timestamp).getTime() <= 7 * 86400 * 1000
-  ).length;
-
   return {
     text:
-      `**Analyse Coach (${profile.name || 'Athlète'} · ${targets.kcal} kcal/j)**\n\n` +
-      `• **Point science (${evidence[0].citation}) :** ${evidence[0].localizedSummary}\n` +
-      (evidence[1]
-        ? `• **Complément (${evidence[1].citation}) :** ${evidence[1].localizedSummary}\n`
-        : '') +
-      `\n**Ton suivi aujourd'hui :** **${Math.max(0, remKcal)} kcal** et **${Math.max(0, remProt)}g P** restants · **${waterMl}/${targets.waterMl} ml** d'eau · **${workouts7d}** séance(s) sur 7 jours.`,
+      `**Synthèse (${profile.name || 'Athlète'} · ${targets.kcal} kcal/j)**\n\n` +
+      `• **Référence scientifique (${evidence[0].citation}) :** ${evidence[0].localizedSummary}\n\n` +
+      `*Astuce : demande-moi précisément **« Crée une séance [muscles/matériel] de 35 min »**, **« Macros de [tes aliments] »**, **« Repas à [X] kcal »** ou **« Comment faire [nom d'exercice] »** !*`,
     sources: evidence,
-    suggestions: defaultSugs.slice(0, 5),
+    suggestions: defaultSugs.slice(0, 4),
     memory: { lastIntent: 'summary' },
   };
 }

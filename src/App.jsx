@@ -606,6 +606,29 @@ export default function App() {
     await clearCoachMessages();
   };
 
+  const handleLogMealFromCoach = async (mealAction) => {
+    if (!mealAction?.items?.length) return;
+    const hour = new Date().getHours();
+    const targetSlot =
+      hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 18 ? 'snack' : 'dinner';
+    const currentDay = await getNutritionLogByDate(todayStr);
+    const entry = {
+      entryId: `meal_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: mealAction.title || 'Repas IA',
+      isRecipe: mealAction.items.length > 1,
+      items: mealAction.items,
+    };
+    const nextLog = {
+      ...currentDay,
+      date: todayStr,
+      meals: {
+        ...currentDay.meals,
+        [targetSlot]: [...(currentDay.meals?.[targetSlot] || []), entry],
+      },
+    };
+    await handleSaveDayLog(nextLog);
+  };
+
   const handleExportJson = async () => {
     const backup = await exportFullBackupData();
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -647,7 +670,7 @@ export default function App() {
         onTriggerInstall={handleTriggerPwaInstall}
       />
 
-      <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-4 pb-24">
+      <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-5 pb-28">
         {activeTab === 'dashboard' && (
           <DashboardTab
             profile={profile}
@@ -734,6 +757,8 @@ export default function App() {
             messages={coachMessages}
             onAppendMessage={handleAppendCoachMessage}
             onClearHistory={handleClearCoachHistory}
+            onStartWorkoutFromCoach={(wk) => handleStartWorkout(wk, 'normal')}
+            onLogMealFromCoach={handleLogMealFromCoach}
           />
         )}
       </main>

@@ -1,5 +1,6 @@
-// Base nutritionnelle 100% locale — +245 aliments complets (valeurs ANSES Ciqual / USDA pour 100g)
+// Base nutritionnelle 100% locale — +300 aliments complets (valeurs ANSES Ciqual / USDA pour 100g)
 import { EXTENDED_FOODS_CATALOG } from './extendedFoodsCatalog.js';
+import { CLUB_FOODS_EXPANSION } from './clubFoodsExpansion.js';
 
 export const AISLE_CATEGORIES = [
   'Viandes, Poissons & Protéines végétales',
@@ -1609,6 +1610,7 @@ export const FOOD_DATABASE = [
     tags: [],
   },
   ...EXTENDED_FOODS_CATALOG,
+  ...CLUB_FOODS_EXPANSION,
 ];
 
 const FOOD_MAP = new Map(

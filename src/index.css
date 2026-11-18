@@ -4,48 +4,86 @@
 
 @layer base {
   :root {
-    --bg-app: #09090b;
-    --bg-card: rgba(24, 24, 28, 0.72);
-    --bg-elevated: #141418;
-    --bg-subtle: rgba(39, 39, 43, 0.72);
-    --text-primary: #f4f4f5;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --btn-primary-bg: #f4f4f5;
-    --btn-primary-fg: #09090b;
+    --bg-app: #07080b;
+    --bg-card: #101218;
+    --bg-elevated: #151821;
+    --bg-subtle: #1b1f2b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-subtle: rgba(255, 255, 255, 0.065);
+    --border-strong: rgba(255, 255, 255, 0.13);
+    --accent: #c8ff00;
+    --accent-hover: #d6ff38;
+    --accent-fg: #07080b;
+    --accent-text: #c8ff00;
+    --accent-soft: rgba(200, 255, 0, 0.11);
+    --accent-border: rgba(200, 255, 0, 0.32);
+    --btn-primary-bg: #f8fafc;
+    --btn-primary-fg: #07080b;
     color-scheme: dark;
   }
 
   html.theme-amoled {
     --bg-app: #000000;
-    --bg-card: #0a0a0c;
-    --bg-elevated: #0f0f12;
-    --bg-subtle: #16161a;
-    --border-subtle: rgba(255, 255, 255, 0.09);
+    --bg-card: #090a0d;
+    --bg-elevated: #0e1015;
+    --bg-subtle: #161820;
+    --border-subtle: rgba(255, 255, 255, 0.085);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --accent: #c8ff00;
+    --accent-hover: #d6ff38;
+    --accent-fg: #000000;
+    --accent-text: #c8ff00;
+    --accent-soft: rgba(200, 255, 0, 0.12);
+    --accent-border: rgba(200, 255, 0, 0.36);
     --btn-primary-bg: #ffffff;
     --btn-primary-fg: #000000;
     color-scheme: dark;
   }
 
   html.theme-light {
-    --bg-app: #f5f5f3;
-    --bg-card: rgba(255, 255, 255, 0.94);
+    --bg-app: #f3f4f0;
+    --bg-card: #ffffff;
     --bg-elevated: #ffffff;
-    --bg-subtle: #eaeae6;
-    --text-primary: #141416;
-    --text-secondary: #4c4c54;
-    --text-muted: #71717a;
-    --border-subtle: rgba(0, 0, 0, 0.08);
-    --btn-primary-bg: #18181b;
+    --bg-subtle: #e8eae3;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --border-subtle: rgba(15, 23, 42, 0.075);
+    --border-strong: rgba(15, 23, 42, 0.14);
+    --accent: #111827;
+    --accent-hover: #1e293b;
+    --accent-fg: #c8ff00;
+    --accent-text: #15803d;
+    --accent-soft: rgba(21, 128, 61, 0.1);
+    --accent-border: rgba(21, 128, 61, 0.28);
+    --btn-primary-bg: #0f172a;
     --btn-primary-fg: #ffffff;
     color-scheme: light;
   }
 
-  /* Lisibilité renforcée de l'émeraude sur fond clair Ivoire */
-  html.theme-light .text-emerald-400 {
-    color: #059669;
+  /* Harmonisation globale de l'identité visuelle Volt Athletic Club */
+  .text-emerald-400 {
+    color: var(--accent-text) !important;
   }
+  .bg-emerald-400 {
+    background-color: var(--accent) !important;
+    color: var(--accent-fg) !important;
+  }
+  .bg-emerald-400\/10,
+  .bg-emerald-400\/15,
+  .bg-emerald-400\/20 {
+    background-color: var(--accent-soft) !important;
+  }
+  .border-emerald-400,
+  .border-emerald-400\/25,
+  .border-emerald-400\/30,
+  .border-emerald-400\/40,
+  .border-emerald-400\/50 {
+    border-color: var(--accent-border) !important;
+  }
+
   html.theme-light .text-sky-400 {
     color: #0284c7;
   }
@@ -63,7 +101,8 @@
     background-color: var(--bg-app);
     color: var(--text-primary);
     -webkit-tap-highlight-color: transparent;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.01em;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
@@ -71,48 +110,127 @@
 @layer components {
   .app-surface {
     background-color: var(--bg-app);
+    background-image: radial-gradient(
+      ellipse 90% 45% at 50% -10%,
+      rgba(200, 255, 0, 0.055),
+      transparent 70%
+    );
     color: var(--text-primary);
+  }
+
+  html.theme-light .app-surface {
+    background-image: radial-gradient(
+      ellipse 90% 40% at 50% -10%,
+      rgba(21, 128, 61, 0.05),
+      transparent 70%
+    );
   }
 
   .card-surface {
     background-color: var(--bg-card);
     border: 1px solid var(--border-subtle);
-    @apply rounded-3xl backdrop-blur-xl transition-colors duration-200;
+    border-radius: 1.5rem;
+    box-shadow: 0 8px 30px -12px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  html.theme-light .card-surface {
+    box-shadow: 0 6px 24px -12px rgba(15, 23, 42, 0.07);
   }
 
   .card-elevated {
     background-color: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    @apply rounded-3xl shadow-2xl shadow-black/40;
+    border: 1px solid var(--border-strong);
+    border-radius: 1.75rem;
+    box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.7);
+  }
+
+  .section-eyebrow {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
   }
 
   .btn-primary {
     background-color: var(--btn-primary-bg);
     color: var(--btn-primary-fg);
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none hover:opacity-90;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm tracking-tight active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none hover:opacity-95;
   }
 
   .btn-accent {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm bg-emerald-400 hover:bg-emerald-300 active:scale-[0.98] text-zinc-950 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
+    background-color: var(--accent);
+    color: var(--accent-fg);
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm tracking-tight active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-accent:hover {
+    background-color: var(--accent-hover);
   }
 
   .btn-secondary {
     background-color: var(--bg-subtle);
     border: 1px solid var(--border-subtle);
     color: var(--text-primary);
-    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-full font-medium text-sm active:scale-[0.98] transition-all duration-150 hover:opacity-90;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-semibold text-xs active:scale-[0.98] transition-all duration-150 hover:border-[var(--border-strong)];
   }
 
   .input-dark {
     background-color: var(--bg-subtle);
     border: 1px solid var(--border-subtle);
     color: var(--text-primary);
-    @apply w-full rounded-2xl px-3.5 py-2.5 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-emerald-400/60 transition-colors;
+    @apply w-full rounded-2xl px-4 py-3 text-sm placeholder:text-[var(--text-muted)] focus:outline-none transition-colors;
+  }
+  .input-dark:focus {
+    border-color: var(--accent-border);
   }
 }
 
+/* Animations biomécaniques fluides pour les démonstrations d'exercices */
+@keyframes bioPhaseA {
+  0%, 100% {
+    opacity: 1;
+  }
+  45%, 55% {
+    opacity: 0;
+  }
+}
+
+@keyframes bioPhaseB {
+  0%, 100% {
+    opacity: 0;
+  }
+  45%, 55% {
+    opacity: 1;
+  }
+}
+
+@keyframes bioBreathPulse {
+  0%, 100% {
+    transform: scaleX(0.28);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.bio-pose-eccentric {
+  animation: bioPhaseA 2.8s ease-in-out infinite;
+}
+
+.bio-pose-concentric {
+  animation: bioPhaseB 2.8s ease-in-out infinite;
+}
+
+.bio-tempo-bar {
+  transform-origin: left center;
+  animation: bioBreathPulse 2.8s ease-in-out infinite;
+}
+
 .pb-safe {
-  padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 .pt-safe {
@@ -129,7 +247,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(161, 161, 170, 0.22);
+  background: rgba(148, 163, 184, 0.22);
   border-radius: 9999px;
 }
 

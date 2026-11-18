@@ -18,6 +18,7 @@ import {
   playSetValidatedPop,
   playWorkoutCompleteFanfare,
 } from '../utils/soundEffects';
+import ExerciseMotionVisual from './ExerciseMotionVisual';
 
 function formatClock(totalSec) {
   const s = Math.max(0, Math.floor(totalSec));
@@ -388,12 +389,15 @@ export default function ActiveWorkoutPlayer({
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-3 max-w-lg w-full mx-auto space-y-5">
+        {/* Démonstration biomécanique animée temps réel sur le plateau */}
+        <ExerciseMotionVisual exercise={currentExercise} size="hero" animated showAnatomy />
+
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
-            <span>{currentExercise.muscle}</span>
-            <span className="tabular-nums">Repos {currentExercise.restSeconds || 60}s</span>
+            <span className="font-semibold text-emerald-400">{currentExercise.muscle}</span>
+            <span className="font-mono">Repos {currentExercise.restSeconds || 60}s</span>
           </div>
-          <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
+          <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
             {currentExercise.name}
           </h3>
           {currentExercise.cue && (

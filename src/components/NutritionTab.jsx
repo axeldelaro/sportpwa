@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Plus,
   Trash2,
   ShoppingBag,
@@ -122,6 +123,7 @@ export default function NutritionTab({
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [exclusionMode, setExclusionMode] = useState('adapt'); // 'adapt' | 'hide'
   const [expandedRecipeId, setExpandedRecipeId] = useState(null);
+  const [expandedEntryId, setExpandedEntryId] = useState(null);
 
   // Modale légère d'ajout d'ingrédient directement DANS un plat/recette déjà posé
   const [appendTargetEntry, setAppendTargetEntry] = useState(null); // { slotId, entryId, title }
@@ -582,17 +584,24 @@ export default function NutritionTab({
                       { kcal: 0, protein: 0, carbs: 0, fat: 0 }
                     );
 
+                    const isExpandedEntry = expandedEntryId === entry.entryId;
+
                     return (
                       <div
                         key={entry.entryId}
-                        className="rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] p-3.5 space-y-2.5"
+                        className="rounded-2xl bg-[var(--bg-subtle)]/55 border border-[var(--border-subtle)] p-4 space-y-3 transition-colors"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                        <div
+                          onClick={() =>
+                            setExpandedEntryId(isExpandedEntry ? null : entry.entryId)
+                          }
+                          className="flex items-center justify-between gap-3 cursor-pointer"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
                               {entry.title}
                             </h4>
-                            <p className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                            <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">
                               <strong className="text-[var(--text-primary)]">
                                 {Math.round(entryTotals.kcal)} kcal
                               </strong>{' '}
@@ -601,118 +610,136 @@ export default function NutritionTab({
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setAppendTargetEntry({
-                                  slotId: slot.id,
-                                  entryId: entry.entryId,
-                                  title: entry.title,
-                                })
-                              }
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[10.5px] font-medium text-emerald-400"
-                              title="Ajouter un ingrédient (ex: citron, sauce, épice) directement dans ce plat"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Ingrédient
-                            </button>
-
-                            {entry.items?.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleSaveEntryAsCustomRecipe(entry)}
-                                className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
-                                title="Mémoriser ce plat modifié dans mes recettes"
-                              >
-                                <BookmarkPlus className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMealEntry(slot.id, entry.entryId)}
-                              className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-rose-400 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] text-[var(--text-muted)] font-medium">
+                              {isExpandedEntry ? 'Fermer' : 'Modifier'}
+                            </span>
+                            <ChevronDown
+                              className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${
+                                isExpandedEntry ? 'rotate-180 text-emerald-400' : ''
+                              }`}
+                            />
                           </div>
                         </div>
 
-                        <div className="space-y-1.5 pt-1 border-t border-[var(--border-subtle)]">
-                          {(entry.items || []).map((it, idx) => {
-                            const food = getFoodById(it.foodId);
-                            if (!food) return null;
-
-                            return (
-                              <div
-                                key={`${it.foodId}_${idx}`}
-                                className="flex items-center justify-between gap-2 text-xs py-0.5"
+                        {isExpandedEntry && (
+                          <div className="space-y-3 pt-3 border-t border-[var(--border-subtle)] animate-fade-in">
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAppendTargetEntry({
+                                    slotId: slot.id,
+                                    entryId: entry.entryId,
+                                    title: entry.title,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] text-xs font-bold text-emerald-400"
                               >
-                                <div className="min-w-0 flex-1 truncate">
-                                  <span className="text-[var(--text-primary)]">{food.name}</span>
-                                  <span className="text-[10.5px] text-[var(--text-muted)] ml-1">
-                                    ({food.state})
-                                  </span>
-                                </div>
+                                <Plus className="w-3.5 h-3.5" />
+                                Ajouter un ingrédient
+                              </button>
 
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <div className="inline-flex items-center bg-[var(--bg-subtle)] rounded-lg px-2 py-0.5 border border-[var(--border-subtle)]">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="1500"
-                                      value={it.grams}
-                                      onChange={(e) =>
-                                        handleUpdateIngredientGrams(
-                                          slot.id,
-                                          entry.entryId,
-                                          idx,
-                                          e.target.value
-                                        )
-                                      }
-                                      className="w-11 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
-                                    />
-                                    <span className="text-[10px] text-[var(--text-muted)] ml-0.5">g</span>
-                                  </div>
-
+                              <div className="flex items-center gap-1.5">
+                                {entry.items?.length > 1 && (
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      handleSwapIngredientInMeal(
-                                        slot.id,
-                                        entry.entryId,
-                                        idx,
-                                        it
-                                      )
-                                    }
-                                    className="p-1.5 rounded-lg bg-[var(--bg-subtle)] text-emerald-400 border border-[var(--border-subtle)]"
-                                    title="Remplacer par un équivalent"
+                                    onClick={() => handleSaveEntryAsCustomRecipe(entry)}
+                                    className="p-2 rounded-xl bg-[var(--bg-app)] text-[var(--text-secondary)] hover:text-emerald-400 transition-colors"
+                                    title="Sauvegarder comme recette perso"
                                   >
-                                    <ArrowLeftRight className="w-3 h-3" />
+                                    <BookmarkPlus className="w-4 h-4" />
                                   </button>
+                                )}
 
-                                  {entry.items.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleRemoveSingleItemFromEntry(
-                                          slot.id,
-                                          entry.entryId,
-                                          idx
-                                        )
-                                      }
-                                      className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400"
-                                      title="Retirer cet ingrédient du plat"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMealEntry(slot.id, entry.entryId)}
+                                  className="p-2 rounded-xl bg-[var(--bg-app)] text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                                  title="Supprimer ce plat"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              {(entry.items || []).map((it, idx) => {
+                                const food = getFoodById(it.foodId);
+                                if (!food) return null;
+
+                                return (
+                                  <div
+                                    key={`${it.foodId}_${idx}`}
+                                    className="flex items-center justify-between gap-2 text-xs py-1 px-2.5 rounded-xl bg-[var(--bg-app)]/55"
+                                  >
+                                    <div className="min-w-0 flex-1 truncate">
+                                      <span className="font-medium text-[var(--text-primary)]">
+                                        {food.name}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <div className="inline-flex items-center bg-[var(--bg-subtle)] rounded-lg px-2 py-1 border border-[var(--border-subtle)]">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="1500"
+                                          value={it.grams}
+                                          onChange={(e) =>
+                                            handleUpdateIngredientGrams(
+                                              slot.id,
+                                              entry.entryId,
+                                              idx,
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-12 bg-transparent text-right text-xs font-bold font-mono text-[var(--text-primary)] focus:outline-none"
+                                        />
+                                        <span className="text-[10px] text-[var(--text-muted)] ml-0.5">
+                                          g
+                                        </span>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleSwapIngredientInMeal(
+                                            slot.id,
+                                            entry.entryId,
+                                            idx,
+                                            it
+                                          )
+                                        }
+                                        className="p-1.5 rounded-lg bg-[var(--bg-subtle)] text-emerald-400 border border-[var(--border-subtle)]"
+                                        title="Remplacer par un équivalent"
+                                      >
+                                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      {entry.items.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleRemoveSingleItemFromEntry(
+                                              slot.id,
+                                              entry.entryId,
+                                              idx
+                                            )
+                                          }
+                                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400"
+                                          title="Retirer cet ingrédient"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -1,13 +1,13 @@
 {
-  "name": "PulseFit",
-  "short_name": "PulseFit",
-  "description": "Coaching sportif, nutrition et liste de courses intelligente 100% hors-ligne.",
+  "name": "PULSE — Athletic & Nutrition Club",
+  "short_name": "PULSE Club",
+  "description": "Coaching sportif biomécanique, nutrition de précision & IA embarquée sans quota.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#07080b",
+  "theme_color": "#07080b",
   "lang": "fr-FR",
   "categories": ["fitness", "health", "food"],
   "icons": [
