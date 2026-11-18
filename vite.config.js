@@ -18,6 +18,9 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             return 'vendor';
           }
+          if (id.includes('ciqualSupermarketCatalog')) {
+            return 'ciqual-db';
+          }
           if (id.includes('/src/data/') || id.includes('\\src\\data\\')) {
             return 'catalog';
           }

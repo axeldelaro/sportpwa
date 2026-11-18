@@ -35,10 +35,13 @@ export default function SubstitutionModal({
 
   const { sourceFood, sourceGrams, sourceMacros, alternatives } = result;
 
-  const filteredAlternatives = alternatives.filter((alt) => {
-    if (!searchQuery.trim()) return true;
-    return normalizeText(alt.food.name).includes(normalizeText(searchQuery));
-  });
+  const filteredAlternatives = useMemo(() => {
+    const q = normalizeText(searchQuery);
+    const list = !q
+      ? alternatives
+      : alternatives.filter((alt) => normalizeText(alt.food.name).includes(q));
+    return list.slice(0, 80);
+  }, [alternatives, searchQuery]);
 
   const dominantNameMap = {
     protein: 'Mêmes protéines',

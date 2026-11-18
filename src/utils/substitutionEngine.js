@@ -126,12 +126,14 @@ export function computeSubstitutions(
 
     const isExactGroup = candidate.swapGroup === sourceFood.swapGroup;
 
-    // Score de proximité globale pour classer les meilleures alternatives en tête
+    // Score de proximité globale pour classer les meilleures alternatives culinaires en tête
     const kcalDiffPenalty = Math.abs(delta.kcal) * 0.6;
     const macroDiffPenalty =
       Math.abs(delta.protein) * 3 + Math.abs(delta.carbs) * 1.5 + Math.abs(delta.fat) * 3;
     const groupPenalty = isExactGroup ? 0 : 120;
-    const relevanceScore = groupPenalty + kcalDiffPenalty + macroDiffPenalty;
+    const corePreferencePenalty = String(candidate.id).startsWith('ciq_') ? 22 : 0;
+    const relevanceScore =
+      groupPenalty + corePreferencePenalty + kcalDiffPenalty + macroDiffPenalty;
 
     alternatives.push({
       food: candidate,
@@ -258,20 +260,31 @@ export function findFoodByQuery(rawQuery) {
   let bestScore = 0;
 
   for (const food of getAllFoods()) {
-    const normName = normalizeText(food.name).split(' ').map(singToken).join(' ');
-    const shortName = normalizeText(food.name.split('(')[0]).split(' ').map(singToken).join(' ');
+    if (food._singNorm === undefined) {
+      Object.defineProperty(food, '_singNorm', {
+        value: normalizeText(food.name).split(' ').map(singToken).join(' '),
+        enumerable: false,
+      });
+      Object.defineProperty(food, '_singShort', {
+        value: normalizeText(food.name.split('(')[0].split(',')[0]).split(' ').map(singToken).join(' '),
+        enumerable: false,
+      });
+    }
+    const normName = food._singNorm;
+    const shortName = food._singShort;
+    const coreBonus = String(food.id).startsWith('ciq_') ? 0 : 4;
     let score = 0;
 
     if (normName === qSing || shortName === qSing) {
-      score = 110;
+      score = 110 + coreBonus;
     } else if (shortName.startsWith(qSing) || normName.startsWith(qSing)) {
-      score = 90;
+      score = 90 + coreBonus;
     } else if (normName.includes(qSing)) {
-      score = 75;
+      score = 75 + coreBonus;
     } else if (queryTokens.length > 0 && queryTokens.every((qt) => normName.includes(qt))) {
-      score = 68;
+      score = 68 + coreBonus;
     } else if (qSing.includes(shortName.split(' ')[0]) && shortName.split(' ')[0].length >= 4) {
-      score = 52;
+      score = 52 + coreBonus;
     }
 
     for (const token of queryTokens) {

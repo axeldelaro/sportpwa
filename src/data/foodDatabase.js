@@ -2,6 +2,7 @@
 import { EXTENDED_FOODS_CATALOG } from './extendedFoodsCatalog.js';
 import { CLUB_FOODS_EXPANSION } from './clubFoodsExpansion.js';
 import { EVERYDAY_FOODS_CATALOG } from './everydayFoodsCatalog.js';
+import { CIQUAL_SUPERMARKET_CATALOG } from './ciqualSupermarketCatalog.js';
 
 export const AISLE_CATEGORIES = [
   'Viandes, Poissons & Protéines végétales',
@@ -1613,15 +1614,18 @@ export const FOOD_DATABASE = [
   ...EXTENDED_FOODS_CATALOG,
   ...CLUB_FOODS_EXPANSION,
   ...EVERYDAY_FOODS_CATALOG,
+  ...CIQUAL_SUPERMARKET_CATALOG,
 ];
 
 const FOOD_MAP = new Map(
   FOOD_DATABASE.map((f) => [f.id, { ...f, sourceRef: f.sourceRef || 'ANSES CIQUAL / USDA' }])
 );
 const EXTERNAL_FOOD_LIST = [];
+let ALL_FOODS_CACHE = [...FOOD_DATABASE];
 
 export function registerExternalFoods(foods = []) {
   const list = Array.isArray(foods) ? foods : [foods];
+  let changed = false;
   for (const f of list) {
     if (!f?.id || !f?.per100g) continue;
     FOOD_MAP.set(f.id, f);
@@ -1631,11 +1635,15 @@ export function registerExternalFoods(foods = []) {
     } else {
       EXTERNAL_FOOD_LIST.push(f);
     }
+    changed = true;
+  }
+  if (changed) {
+    ALL_FOODS_CACHE = [...FOOD_DATABASE, ...EXTERNAL_FOOD_LIST];
   }
 }
 
 export function getAllFoods() {
-  return [...FOOD_DATABASE, ...EXTERNAL_FOOD_LIST];
+  return ALL_FOODS_CACHE;
 }
 
 export function getFoodById(foodId) {

@@ -103,7 +103,7 @@ export default function SmartFoodPicker({
     };
   }, [query, lang, profile]);
 
-  const localFoods = useMemo(() => {
+  const { localFoods, totalCompatibleCount } = useMemo(() => {
     const all = getAllFoods().filter((f) =>
       isFoodCompatibleWithProfile(f, profile, { ignoreDislikes: Boolean(query.trim()) })
     );
@@ -115,14 +115,16 @@ export default function SmartFoodPicker({
         : all;
 
     if (!query.trim()) {
-      return byGroup.slice(0, 90);
+      return { localFoods: byGroup.slice(0, 90), totalCompatibleCount: byGroup.length };
     }
 
-    return byGroup
+    const matched = byGroup
       .map((f) => ({ f, score: scoreFoodMatch(f, query) }))
       .filter((x) => x.score >= 25)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.f);
+
+    return { localFoods: matched.slice(0, 90), totalCompatibleCount: matched.length };
   }, [profile, groupFilter, query]);
 
   // Synthèse automatique universelle si l'aliment tapé n'est pas encore dans le catalogue local
@@ -416,7 +418,7 @@ export default function SmartFoodPicker({
         {localFoods.length > 0 && (
           <div className="space-y-0.5">
             <p className="section-eyebrow px-1 pb-1">
-              Catalogue hors-ligne ({localFoods.length})
+              Catalogue hors-ligne ({totalCompatibleCount.toLocaleString('fr-FR')} aliments)
             </p>
             {localFoods.map((f) => {
               const isSelected = activeFood?.id === f.id;

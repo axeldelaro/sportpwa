@@ -1,6 +1,6 @@
 # Pulse — Entraînement & Nutrition (PWA Offline-First)
 
-**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **350+ aliments hors-ligne (+ 3 millions+ Open Food Facts + synthèse universelle pour tout plat non enregistré)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
+**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **près de 3 000 aliments officiels ANSES CIQUAL 100 % hors-ligne (+ 3 millions+ Open Food Facts + synthèse universelle)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
 
 - **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa
@@ -24,6 +24,6 @@
 4. **Coach IA Compositionnel Embarqué (100 % Autonome & Sans Quota En Ligne) :**
    - **Générateur de séances en langage naturel**, **calculateur multi-aliments & unités naturelles**, **idées de recettes par ingrédient** (*« Idées de recettes avec du saumon »*) et **solveur de repas au gramme près**, avec boutons d'action directs dans le chat et **25 méta-analyses internationales (`ISSN`, `ACSM`, `IOC`, `The Lancet`, `PubMed`)**.
 
-5. **Panel Intégral d'Aliments & Mémoire Profil Synchronisée Cloud (`AES-256-GCM`) :**
-   - **302 aliments certifiés CIQUAL / USDA hors-ligne** + **3 millions+ de produits Open Food Facts** & code-barres EAN.
+5. **Base Alimentaire Hors-Ligne Intégrale (2 970+ références ANSES CIQUAL) & Synchro Cloud (`AES-256-GCM`) :**
+   - **2 970+ aliments courants de magasin & cuisine 100 % hors-ligne** (`ciqualSupermarketCatalog.js` + catalogues essentiels) + **3 millions+ de produits Open Food Facts** & caméra EAN.
    - Mémoire personnelle (`recipeOverrides`, `dislikedFoodIds`, `favoriteRecipeIds`, 14 équipements sportifs) synchronisée entre PC et smartphone par simple `Identifiant + Mot de passe`.
