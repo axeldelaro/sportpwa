@@ -3,6 +3,7 @@
 **Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **près de 3 000 aliments officiels ANSES CIQUAL 100 % hors-ligne (+ 3 millions+ Open Food Facts + synthèse universelle)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
 
 - **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
+- **Téléchargement direct APK Android (signé via GitHub Actions) :** https://github.com/axeldelaro/sportpwa/releases/download/apk-latest/Pulse.apk
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa
 
 ---

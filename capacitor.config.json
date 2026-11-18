@@ -1,0 +1,13 @@
+{
+  "appId": "com.axeldelaro.pulse",
+  "appName": "Pulse",
+  "webDir": "dist",
+  "backgroundColor": "#111214",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#111214",
+    "allowMixedContent": false
+  }
+}

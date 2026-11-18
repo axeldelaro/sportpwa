@@ -195,6 +195,19 @@ export default function Header({
                     </button>
                   )}
 
+                  {!(typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) && (
+                    <a
+                      href="https://github.com/axeldelaro/sportpwa/releases/download/apk-latest/Pulse.apk"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setMenuOpen(false)}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                    >
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Télécharger l’APK Android</span>
+                    </a>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleExportClick}

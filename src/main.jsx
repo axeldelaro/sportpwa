@@ -3,8 +3,11 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-// Enregistrement & pré-cache immédiat dès l'ouverture du site (sans rechargement intempestif au 1er lancement)
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Enregistrement & pré-cache immédiat sur le Web (ignoré dans l'APK natif Capacitor où tout est déjà embarqué)
+const isNativeApk =
+  typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+
+if (!isNativeApk && 'serviceWorker' in navigator && import.meta.env.PROD) {
   const hadControllerInitially = Boolean(navigator.serviceWorker.controller);
   let refreshing = false;
 
