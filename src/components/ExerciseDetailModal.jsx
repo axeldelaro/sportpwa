@@ -1,7 +1,8 @@
-import React from 'react';
-import { X, Check, Plus, RefreshCw, Info } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { X, Check, Plus, RefreshCw, Info, TrendingUp } from 'lucide-react';
 import ExerciseMotionVisual, { MuscleAnatomyBadge } from './ExerciseMotionVisual';
 import { EQUIPMENT_OPTIONS } from '../data/workoutsData';
+import { computeExerciseProgression } from '../utils/trainingAnalytics';
 
 const EQUIPMENT_LABEL_MAP = Object.fromEntries(
   EQUIPMENT_OPTIONS.map((eq) => [eq.id, eq.label])
@@ -9,10 +10,16 @@ const EQUIPMENT_LABEL_MAP = Object.fromEntries(
 
 export default function ExerciseDetailModal({
   exercise,
+  workoutHistory = [],
   onClose,
   onSelectExercise,
   isSelected = false,
 }) {
+  const progression = useMemo(
+    () => computeExerciseProgression(exercise, workoutHistory),
+    [exercise, workoutHistory]
+  );
+
   if (!exercise) return null;
 
   const eqLabels = (exercise.equipmentTags || []).map(
@@ -91,6 +98,44 @@ export default function ExerciseDetailModal({
               </span>
             </div>
           </div>
+
+          {/* Courbe de progression personnelle sur cet exercice (affichée dès qu'au moins 1 séance existe) */}
+          {progression && (
+            <div className="rounded-xl bg-[var(--bg-subtle)]/55 border border-[var(--border-subtle)] p-3.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-[var(--text-primary)] flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Progression personnelle ({progression.sessionsCount} séance{progression.sessionsCount > 1 ? 's' : ''})</span>
+                </span>
+                <span className="text-xs font-semibold text-emerald-400 tabular-nums">
+                  1RM est. {progression.best1RM} kg
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] tabular-nums">
+                <span>Dernière perf. : {progression.latestPerf}</span>
+                {progression.delta1RM !== 0 && (
+                  <span>
+                    {progression.delta1RM > 0 ? '+' : ''}
+                    {progression.delta1RM} kg sur la période
+                  </span>
+                )}
+              </div>
+
+              {progression.svgPoints && (
+                <svg viewBox="0 0 100 32" className="w-full h-7 overflow-visible pt-1">
+                  <polyline
+                    fill="none"
+                    stroke="var(--accent)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    points={progression.svgPoints}
+                  />
+                </svg>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2.5">
             <div className="rounded-xl bg-[var(--bg-subtle)]/45 border border-[var(--border-subtle)] p-4 space-y-1">

@@ -20,6 +20,7 @@ import {
   matchesSelectedEquipment,
 } from '../data/workoutsData';
 import { normalizeText } from '../utils/substitutionEngine';
+import { computeMuscleRecoveryAndVolume } from '../utils/trainingAnalytics';
 import { tr } from '../i18n/translations';
 import ExerciseMotionVisual from './ExerciseMotionVisual';
 import ExerciseDetailModal from './ExerciseDetailModal';
@@ -96,6 +97,11 @@ export default function WorkoutsTab({
     const r = Math.max(1, Math.min(30, Number(rmReps) || 1));
     return r === 1 ? Math.round(w) : Math.round(w * (1 + r / 30));
   }, [rmWeight, rmReps]);
+
+  const muscleRecoveryStats = useMemo(
+    () => computeMuscleRecoveryAndVolume(workoutHistory),
+    [workoutHistory]
+  );
 
   // Filtrage intelligent des Programmes selon Discipline + Matériel sélectionné
   const filteredPrograms = useMemo(() => {
@@ -919,6 +925,57 @@ export default function WorkoutsTab({
       {/* =================================================================== */}
       {subView === 'history' && (
         <div className="space-y-4">
+          {/* Bilan de récupération musculaire & volume effectif sur 7 jours */}
+          <div className="card-surface p-5 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <span className="section-eyebrow">
+                Récupération & volume effectif (7 jours)
+              </span>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Cible ISSN : 10–20 séries
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {muscleRecoveryStats.map((mz) => (
+                <div
+                  key={mz.id}
+                  className="rounded-xl bg-[var(--bg-subtle)]/55 border border-[var(--border-subtle)] p-2.5 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                      {mz.label}
+                    </span>
+                    <span
+                      className={`text-[10px] font-medium shrink-0 ${
+                        mz.recoveryState === 'recovering'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {mz.recoveryLabel}
+                    </span>
+                  </div>
+
+                  <div className="h-1 w-full rounded-full bg-[var(--bg-card)] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        mz.recoveryState === 'recovering'
+                          ? 'bg-amber-400'
+                          : 'bg-[var(--accent)]'
+                      }`}
+                      style={{ width: `${mz.volumePct}%` }}
+                    />
+                  </div>
+
+                  <div className="text-[10.5px] text-[var(--text-muted)] tabular-nums">
+                    {mz.weeklySets} / {mz.maxOptimal} séries
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="card-surface p-5 space-y-3.5">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
               Estimateur 1RM (Formule d’Epley)
@@ -1115,6 +1172,7 @@ export default function WorkoutsTab({
       {inspectedExercise && (
         <ExerciseDetailModal
           exercise={inspectedExercise}
+          workoutHistory={workoutHistory}
           onClose={() => setInspectedExercise(null)}
           isSelected={quickPickIds.includes(inspectedExercise.id)}
           onSelectExercise={(ex) => toggleQuickPickExercise(ex.id)}

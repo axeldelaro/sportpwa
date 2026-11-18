@@ -16,6 +16,7 @@ import {
   BookmarkPlus,
   RotateCcw,
   Copy,
+  CalendarRange,
 } from 'lucide-react';
 import {
   getAllFoods,
@@ -36,6 +37,7 @@ import {
 import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
 import SmartFoodPicker from './SmartFoodPicker';
+import WeeklyPlannerModal from './WeeklyPlannerModal';
 
 const COMMON_EXCLUSION_SUGGESTIONS = [
   'coriandre_fraiche',
@@ -114,6 +116,8 @@ export default function NutritionTab({
   onToggleFavoriteRecipe,
   onSaveRecipeOverride,
   onCopyPreviousDayMeals,
+  onApplyWeeklyPlan,
+  allNutritionLogs = [],
   customRecipes = [],
   onSaveCustomRecipe,
   onDeleteCustomRecipe,
@@ -136,6 +140,34 @@ export default function NutritionTab({
   // Tiroir "Ce que je ne mange pas" (mémoire profil)
   const [exclusionsModalOpen, setExclusionsModalOpen] = useState(false);
   const [exclusionQuery, setExclusionQuery] = useState('');
+  const [weeklyPlannerOpen, setWeeklyPlannerOpen] = useState(false);
+
+  const upcomingWeekStrip = useMemo(() => {
+    const loggedDates = new Set(
+      (allNutritionLogs || [])
+        .filter((l) =>
+          Object.values(l.meals || {}).some((arr) => Array.isArray(arr) && arr.length > 0)
+        )
+        .map((l) => l.date)
+    );
+    const days = [];
+    let plannedCount = 0;
+    for (let offset = 0; offset < 7; offset++) {
+      const dStr = getTodayDateString(offset);
+      const dt = new Date(dStr + 'T12:00:00');
+      const hasMeals = loggedDates.has(dStr);
+      if (hasMeals) plannedCount += 1;
+      days.push({
+        dateStr: dStr,
+        dayShort: dt.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', {
+          weekday: 'short',
+        }),
+        dayNum: dt.getDate(),
+        hasMeals,
+      });
+    }
+    return plannedCount >= 2 ? days : null;
+  }, [allNutritionLogs, lang]);
 
   // Créateur de recette avec recherche universelle intégrée
   const [customTitle, setCustomTitle] = useState('');
@@ -534,6 +566,16 @@ export default function NutritionTab({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
+            onClick={() => setWeeklyPlannerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+            title="Générer la semaine à partir de quelques ingrédients"
+          >
+            <CalendarRange className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Semaine</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setExclusionsModalOpen(true)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
               dislikedIds.length > 0
@@ -543,7 +585,8 @@ export default function NutritionTab({
             title="Gérer les ingrédients que tu ne manges pas"
           >
             <Ban className="w-3.5 h-3.5" />
-            <span>Exclus{dislikedIds.length > 0 ? ` (${dislikedIds.length})` : ''}</span>
+            <span className="hidden xs:inline">Exclus</span>
+            {dislikedIds.length > 0 && <span>({dislikedIds.length})</span>}
           </button>
 
           <button
@@ -554,10 +597,46 @@ export default function NutritionTab({
             title={tr(lang, 'to_shopping')}
           >
             <ShoppingBag className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-            <span className="hidden xs:inline">{tr(lang, 'to_shopping')}</span>
           </button>
         </div>
       </div>
+
+      {/* Bandeau discret de navigation sur la semaine planifiée (affiché uniquement quand >= 2 jours sont planifiés) */}
+      {upcomingWeekStrip && (
+        <div className="grid grid-cols-7 gap-1.5">
+          {upcomingWeekStrip.map((wd) => {
+            const isSel = wd.dateStr === selectedDate;
+            return (
+              <button
+                key={wd.dateStr}
+                type="button"
+                onClick={() => onChangeDate(wd.dateStr)}
+                className={`py-1.5 rounded-lg border text-center transition-colors ${
+                  isSel
+                    ? 'bg-[var(--text-primary)] border-[var(--text-primary)] text-[var(--bg-app)]'
+                    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <span className="block text-[10px] capitalize opacity-75">
+                  {wd.dayShort.replace('.', '')}
+                </span>
+                <span className="block text-xs font-semibold tabular-nums leading-tight">
+                  {wd.dayNum}
+                </span>
+                <span
+                  className={`mx-auto mt-0.5 block w-1 h-1 rounded-full ${
+                    wd.hasMeals
+                      ? isSel
+                        ? 'bg-[var(--bg-app)]'
+                        : 'bg-[var(--accent)]'
+                      : 'bg-transparent'
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* 2. SYNTHÈSE DU JOUR */}
       <section className="card-surface p-5 space-y-3">
@@ -590,19 +669,30 @@ export default function NutritionTab({
           />
         </div>
 
-        {dayTotals.kcal === 0 && onCopyPreviousDayMeals && (
-          <div className="pt-1 flex justify-end">
+        {dayTotals.kcal === 0 && (
+          <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
             <button
               type="button"
-              onClick={async () => {
-                const ok = await onCopyPreviousDayMeals(selectedDate);
-                triggerToast(ok ? 'Repas de la veille dupliqués' : 'Aucun repas enregistré la veille');
-              }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:underline"
+              onClick={() => setWeeklyPlannerOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400 hover:underline"
             >
-              <Copy className="w-3.5 h-3.5" />
-              Dupliquer mes repas de la veille
+              <CalendarRange className="w-3.5 h-3.5" />
+              Générer ma semaine selon mes ingrédients
             </button>
+
+            {onCopyPreviousDayMeals && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await onCopyPreviousDayMeals(selectedDate);
+                  triggerToast(ok ? 'Repas de la veille dupliqués' : 'Aucun repas enregistré la veille');
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Dupliquer la veille
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -1440,7 +1530,7 @@ export default function NutritionTab({
               <button
                 type="button"
                 onClick={() => setExclusionsModalOpen(false)}
-                className="btn-accent w-full !py-2.5 !text-xs"
+                className="btn-primary w-full !py-2.5 !text-xs"
               >
                 Appliquer à mes recettes
               </button>
@@ -1448,6 +1538,35 @@ export default function NutritionTab({
           </div>
         </div>
       )}
+
+      {/* MODALE 4 : GÉNÉRATEUR DE SEMAINE & CALCUL DES INGRÉDIENTS MANQUANTS */}
+      <WeeklyPlannerModal
+        isOpen={weeklyPlannerOpen}
+        onClose={() => setWeeklyPlannerOpen(false)}
+        startDateStr={selectedDate}
+        lang={lang}
+        profile={profile}
+        customRecipes={customRecipes}
+        onApplyPlanToJournalAndShopping={async (plan, missingToBuy) => {
+          if (onApplyWeeklyPlan) {
+            await onApplyWeeklyPlan(plan, missingToBuy);
+            triggerToast(
+              `Semaine planifiée (${plan.days.length}j) · ${missingToBuy.length} manquant(s) aux courses`
+            );
+          }
+        }}
+        onSendMissingOnlyToShopping={async (missingToBuy) => {
+          if (missingToBuy.length > 0) {
+            await onSendItemsToShoppingList(
+              missingToBuy.map((it) => ({
+                foodId: it.foodId,
+                grams: it.totalGrams,
+              }))
+            );
+            triggerToast(`${missingToBuy.length} ingrédient(s) manquant(s) ajoutés aux courses`);
+          }
+        }}
+      />
     </div>
   );
 }

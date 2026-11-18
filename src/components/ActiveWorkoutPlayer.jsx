@@ -85,6 +85,30 @@ export default function ActiveWorkoutPlayer({
     return () => clearInterval(id);
   }, [showSummary]);
 
+  // Maintien automatique de l'écran allumé en séance (Screen Wake Lock API)
+  useEffect(() => {
+    if (showSummary || typeof navigator === 'undefined' || !('wakeLock' in navigator)) {
+      return undefined;
+    }
+    let sentinel = null;
+    const acquire = async () => {
+      try {
+        sentinel = await navigator.wakeLock.request('screen');
+      } catch {
+        // Non supporté ou batterie faible
+      }
+    };
+    acquire();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') acquire();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (sentinel) sentinel.release().catch(() => {});
+    };
+  }, [showSummary]);
+
   useEffect(() => {
     if (!session || showSummary) return;
     onPersistSession({
@@ -110,14 +134,36 @@ export default function ActiveWorkoutPlayer({
   }, [restTimer.active, restTimer.paused]);
 
   useEffect(() => {
-    if (!soundEnabled) return;
     if (restTimer.justFinished) {
-      playRestFinishedAlert();
+      if (soundEnabled) playRestFinishedAlert();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([110, 55, 110]);
+      }
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden' &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      ) {
+        try {
+          new Notification('Pulse — Repos terminé', {
+            body: `Prêt pour la suite : ${currentExercise?.name || 'Série suivante'}`,
+          });
+        } catch {
+          // Notification ignorée
+        }
+      }
       setRestTimer((prev) => ({ ...prev, justFinished: false }));
-    } else if (restTimer.active && !restTimer.paused && restTimer.remaining > 0 && restTimer.remaining <= 3) {
+    } else if (
+      soundEnabled &&
+      restTimer.active &&
+      !restTimer.paused &&
+      restTimer.remaining > 0 &&
+      restTimer.remaining <= 3
+    ) {
       playTickBeep();
     }
-  }, [restTimer.remaining, restTimer.justFinished, restTimer.active, restTimer.paused, soundEnabled]);
+  }, [restTimer.remaining, restTimer.justFinished, restTimer.active, restTimer.paused, soundEnabled, currentExercise]);
 
   // Timer d'effort (sans appel d'état parent dans l'updater React)
   useEffect(() => {
@@ -172,6 +218,9 @@ export default function ActiveWorkoutPlayer({
       updateExercises(next);
 
       if (nextCompleted) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(18);
+        }
         if (soundEnabled) {
           if (forceTrue) playRestFinishedAlert();
           else playSetValidatedPop();
@@ -198,6 +247,23 @@ export default function ActiveWorkoutPlayer({
   }, [completedEffortSetSignal, currentExIdx, handleToggleSetComplete]);
 
   if (!session || !currentExercise) return null;
+
+  const handleCycleSetType = (exIndex, setIndex) => {
+    const order = ['normal', 'warmup', 'dropset'];
+    const next = exercises.map((ex, i) => {
+      if (i !== exIndex) return ex;
+      return {
+        ...ex,
+        setRows: ex.setRows.map((row, sIdx) => {
+          if (sIdx !== setIndex) return row;
+          const cur = row.setType || 'normal';
+          const nextType = order[(order.indexOf(cur) + 1) % order.length];
+          return { ...row, setType: nextType };
+        }),
+      };
+    });
+    updateExercises(next);
+  };
 
   const handleUpdateSetField = (exIndex, setIndex, field, value) => {
     const next = exercises.map((ex, i) => {
@@ -282,7 +348,13 @@ export default function ActiveWorkoutPlayer({
       const bestToday = Math.max(
         0,
         ...ex.setRows
-          .filter((s) => s.completed && Number(s.weightKg) > 0 && Number(s.reps) > 0)
+          .filter(
+            (s) =>
+              s.completed &&
+              s.setType !== 'warmup' &&
+              Number(s.weightKg) > 0 &&
+              Number(s.reps) > 0
+          )
           .map((s) => Number(s.weightKg) * (1 + Number(s.reps) / 30))
       );
       return bestToday > ex.bestPast1RM + 0.5;
@@ -558,9 +630,24 @@ export default function ActiveWorkoutPlayer({
                   : 'card-surface !rounded-2xl'
               }`}
             >
-              <div className="col-span-2 pl-1.5 text-xs font-semibold text-[var(--text-muted)] tabular-nums">
-                #{row.setNumber}
-              </div>
+              <button
+                type="button"
+                onClick={() => handleCycleSetType(currentExIdx, sIdx)}
+                title="Toucher pour basculer : Série normale (#) · Échauffement (E) · Drop-set (D)"
+                className={`col-span-2 py-1 rounded-lg text-xs font-semibold tabular-nums text-center transition-colors ${
+                  row.setType === 'warmup'
+                    ? 'bg-amber-400/15 text-amber-400'
+                    : row.setType === 'dropset'
+                    ? 'bg-sky-400/15 text-sky-400'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]'
+                }`}
+              >
+                {row.setType === 'warmup'
+                  ? 'E'
+                  : row.setType === 'dropset'
+                  ? 'D'
+                  : `#${row.setNumber}`}
+              </button>
 
               {currentExercise.type === 'timed' ? (
                 <>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pulsefit-pwa-v7.0';
+const CACHE_NAME = 'pulsefit-pwa-v7.5';
 const APP_SHELL = [
   './',
   './index.html',

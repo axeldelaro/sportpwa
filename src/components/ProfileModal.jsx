@@ -6,11 +6,18 @@ import {
   DIETARY_FILTERS,
   calculateNutritionalTargets,
 } from '../db/database';
-import { getAllFoods, isFoodCompatibleWithProfile } from '../data/foodDatabase';
+import {
+  getAllFoods,
+  isFoodCompatibleWithProfile,
+  calculateFoodMacros,
+} from '../data/foodDatabase';
+import { computeAdaptiveTDEE } from '../utils/trainingAnalytics';
 
 export default function ProfileModal({
   isOpen,
   profile,
+  bodyMetrics = [],
+  allNutritionLogs = [],
   onClose,
   onSaveProfile,
   onSwitchToCloudRestore,
@@ -58,6 +65,21 @@ export default function ProfileModal({
     () => getAllFoods().filter((f) => isFoodCompatibleWithProfile(f, form)).length,
     [form]
   );
+
+  const adaptiveTdee = useMemo(() => {
+    const dailyKcals = (allNutritionLogs || []).map((log) => {
+      let kcal = 0;
+      Object.values(log.meals || {}).forEach((entries) => {
+        (entries || []).forEach((e) => {
+          (e.items || []).forEach((it) => {
+            kcal += calculateFoodMacros(it.foodId, it.grams).kcal;
+          });
+        });
+      });
+      return { date: log.date, kcal: Math.round(kcal) };
+    });
+    return computeAdaptiveTDEE(bodyMetrics, dailyKcals);
+  }, [bodyMetrics, allNutritionLogs]);
 
   if (!isOpen) return null;
 
@@ -276,6 +298,48 @@ export default function ProfileModal({
                 {form.manualTargets ? 'Calcul auto' : 'Ajuster'}
               </button>
             </div>
+
+            {adaptiveTdee && (
+              <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 flex items-center justify-between gap-2 text-xs">
+                <div className="min-w-0">
+                  <span className="font-medium text-[var(--text-primary)] block">
+                    Maintien réel observé : {adaptiveTdee.observedTdee} kcal/j
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                    Sur {adaptiveTdee.spanDays}j ({adaptiveTdee.weightDeltaKg > 0 ? '+' : ''}
+                    {adaptiveTdee.weightDeltaKg} kg · moy. {adaptiveTdee.avgLoggedKcal} kcal)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const goalMult =
+                      form.goal === 'cut' ? 0.83 : form.goal === 'bulk' ? 1.12 : 1;
+                    const calibratedKcal = Math.round((adaptiveTdee.observedTdee * goalMult) / 10) * 10;
+                    const prot = autoComputed.protein;
+                    const fat = autoComputed.fat;
+                    const carbs = Math.max(
+                      40,
+                      Math.round((calibratedKcal - prot * 4 - fat * 9) / 4)
+                    );
+                    setForm((prev) => ({
+                      ...prev,
+                      manualTargets: true,
+                      targets: {
+                        kcal: calibratedKcal,
+                        protein: prot,
+                        carbs,
+                        fat,
+                        waterMl: autoComputed.waterMl,
+                      },
+                    }));
+                  }}
+                  className="btn-secondary !py-1 !px-2.5 !text-[11px] shrink-0"
+                >
+                  Appliquer
+                </button>
+              </div>
+            )}
 
             {!form.manualTargets ? (
               <div className="grid grid-cols-5 gap-2 text-center tabular-nums">

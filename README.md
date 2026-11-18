@@ -13,13 +13,13 @@
    - Typographie **Inter** à chiffres tabulaires (`tabular-nums`), surfaces mattes finement étagées sans néon ni surcharge visuelle, contrôles segmentés tactiles, contrastes d'encre nets et accent **Sauge minérale** mesuré.
    - Illustrations biomécaniques et anatomiques adaptatives aux thèmes sombre et clair.
 
-2. **Recettes Dynamiques en Temps Réel & 4 Suggestions Variées par Aliment :**
-   - **Réactualisation intégrale des recettes** (`resolveDynamicRecipe`) : remplacer un ingrédient dans le catalogue `Recettes`, dans le journal quotidien ou via la liste `Exclus` met à jour instantanément le **titre**, les **étapes de préparation**, les **ingrédients** et les **macros** (avec mémorisation dans le profil synchronisé et option *« Rétablir l'originale »*).
-   - **Suggestions culinaires variées (4 idées par type de repas)** disponibles en 1 tap pour **chacun des 302+ aliments hors-ligne et produits Open Food Facts** (*Petit-déjeuner*, *Déjeuner*, *Collation*, *Dîner*) depuis le sélecteur d'aliments, la liste de courses et le Coach IA.
+2. **Générateur de Semaine (« Du Placard au Menu ») & Recettes Dynamiques :**
+   - **Planificateur 3 / 5 / 7 jours (`WeeklyPlannerModal.jsx`)** : saisissez quelques ingrédients disponibles (*ex : poulet, riz, œufs*) pour composer automatiquement la semaine complète calée sur vos macros (mode *Varié* ou *Batch Cooking 2j*), distinguer ce que vous possédez déjà (`✓`) de **ce qu'il vous manque (`+`)**, et envoyer les manquants aux courses en 1 clic.
+   - **Réactualisation intégrale des recettes** (`resolveDynamicRecipe`) et **4 suggestions culinaires variées par repas** pour chacun des 302+ aliments hors-ligne et produits Open Food Facts (+ **scan caméra EAN en direct**).
 
-3. **Démonstrations Biomécaniques Animées 60 FPS & Outils de Progression en Salle :**
-   - Moteur cinématique vectoriel articulé (`ExerciseMotionVisual.jsx`) sur **les 144 exercices** + cartographie anatomique musculaire.
-   - **Pré-remplissage intelligent des charges** d'après la dernière séance, **calculateur de disques olympiques (barre 20 kg)** intégré au lecteur actif et **détection automatique des Records Personnels (PR / 1RM)**.
+3. **Démonstrations Biomécaniques, Récupération & Outils Salle :**
+   - Moteur cinématique vectoriel articulé (`ExerciseMotionVisual.jsx`) adaptatif aux thèmes sur **les 144 exercices** + **courbe de progression personnelle (1RM)** sur chaque fiche mouvement.
+   - **Carte de récupération musculaire & volume effectif 7 jours**, **anti-veille écran (`Wake Lock`)**, **retour haptique**, **séries avancées (`#` Normale / `E` Échauffement / `D` Drop-set)**, **calculateur de disques olympiques (`20 kg`)** et **métabolisme réel observé (`TDEE adaptatif`)**.
 
 4. **Coach IA Compositionnel Embarqué (100 % Autonome & Sans Quota En Ligne) :**
    - **Générateur de séances en langage naturel**, **calculateur multi-aliments & unités naturelles**, **idées de recettes par ingrédient** (*« Idées de recettes avec du saumon »*) et **solveur de repas au gramme près**, avec boutons d'action directs dans le chat et **25 méta-analyses internationales (`ISSN`, `ACSM`, `IOC`, `The Lancet`, `PubMed`)**.

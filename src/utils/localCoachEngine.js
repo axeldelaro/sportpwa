@@ -25,6 +25,10 @@ import {
   getVariedRecipesForFood,
 } from './foodRecipeSuggester.js';
 import {
+  parsePantryTextToFoods,
+  generateWeeklyMealPlan,
+} from './weeklyMealPlanner.js';
+import {
   SCIENTIFIC_STUDIES,
   prewarmScientificIndex,
   retrieveScientificEvidence,
@@ -32,13 +36,13 @@ import {
 
 export const QUICK_COACH_SUGGESTIONS_BY_LANG = {
   fr: [
+    'J’ai du poulet, du riz et des œufs : idées & manquants',
     'Crée-moi une séance Pecs & Triceps de 35 min',
     'Menu complet calibré sur mes macros du jour',
     'Macros de 3 œufs, 70g d’avoine et 1 banane',
     'Comment bien exécuter le Hip Thrust ?',
     'Par quoi remplacer 80g de riz basmati ?',
     'Repas du soir à 650 kcal riche en protéines',
-    'Créatine & compléments dosés pour mon poids',
   ],
   en: [
     'Build a 35-min Chest & Triceps workout',
@@ -832,6 +836,78 @@ export function generateCoachResponse(userMessage, context = {}) {
         'Menu complet calibré sur mes macros du jour',
       ],
     };
+  }
+
+  // PRIORITÉ A2 : Générateur de recettes & liste des manquants à partir de plusieurs ingrédients du placard
+  if (
+    norm.includes('j ai ') ||
+    norm.includes("j'ai ") ||
+    norm.includes('placard') ||
+    norm.includes('frigo') ||
+    norm.includes('manque') ||
+    ((norm.includes('semaine') || norm.includes('cuisiner') || norm.includes('recette')) &&
+      (userMessage.includes(',') || norm.includes(' et ')))
+  ) {
+    const cleanedPantryStr = userMessage
+      .replace(/^(salut|bonjour)?\s*(j['’]ai|dans mon frigo|dans mon placard|avec|recettes? avec|cuisiner avec|fais[- ]moi ma semaine avec)\s*/i, '')
+      .replace(/\s*:\s*id[ée]es.*$/i, '')
+      .replace(/\b(du|de la|des|de l['’]|un|une|quelques|et que me manque[- ]t[- ]il|que cuisiner|fais ma semaine|manquants?)\b/gi, ',');
+    const pantryFoods = parsePantryTextToFoods(cleanedPantryStr, profile);
+    if (pantryFoods.length >= 2) {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const miniPlan = generateWeeklyMealPlan({
+        pantryFoodIds: pantryFoods.map((f) => f.id),
+        daysCount: 5,
+        mealsPerDay: 4,
+        batchCooking: false,
+        startDateStr: todayIso,
+        lang,
+        profile,
+      });
+
+      const day0 = miniPlan.days[0];
+      const mealLines = ['breakfast', 'lunch', 'dinner']
+        .map((slot) => {
+          const m = day0?.meals?.[slot];
+          if (!m) return null;
+          const lbl =
+            slot === 'breakfast' ? 'Matin' : slot === 'lunch' ? 'Midi' : 'Soir';
+          return `• **${lbl}** : ${m.title} → **${m.macros.kcal} kcal** (${m.macros.protein}g P)`;
+        })
+        .filter(Boolean);
+
+      const topMissing = miniPlan.missingItems
+        .slice(0, 6)
+        .map((it) => `${it.name.split('(')[0].trim()} (${it.totalGrams}g)`)
+        .join(', ');
+
+      const featuredLunch = day0?.meals?.lunch || day0?.meals?.dinner;
+
+      return {
+        text:
+          `À partir de tes ingrédients (**${pantryFoods.map((f) => f.name.split('(')[0].trim()).join(', ')}**), voici une structure type sur **5 jours (~${miniPlan.avgDailyMacros.kcal} kcal/j · ${miniPlan.avgDailyMacros.protein}g P)** :\n\n` +
+          mealLines.join('\n') +
+          `\n\n**Ce qu’il peut te manquer pour compléter la semaine :**\n` +
+          (topMissing || 'Rien d’essentiel — tu as déjà toute la base !') +
+          `\n\n*Astuce : ouvre **Repas → Semaine** pour ajuster les 3 à 7 jours repas par repas et envoyer les manquants aux courses en 1 clic.*`,
+        mealAction: featuredLunch
+          ? {
+              title: featuredLunch.title,
+              kcal: featuredLunch.macros.kcal,
+              protein: featuredLunch.macros.protein,
+              items: featuredLunch.items,
+              preferredSlot: 'lunch',
+            }
+          : undefined,
+        sources: evidence,
+        suggestions: [
+          'Menu complet calibré sur mes macros du jour',
+          'Combler mes protéines du jour',
+          'Crée-moi une séance Pecs & Triceps de 35 min',
+        ],
+        memory: { lastIntent: 'pantry_planner' },
+      };
+    }
   }
 
   // PRIORITÉ B0 : Demande d'idées de recettes autour d'un aliment précis (ex: "Recettes avec du citron / avocat / poulet")

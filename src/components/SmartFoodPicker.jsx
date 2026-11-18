@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   ScanBarcode,
+  Camera,
   Globe,
   Loader2,
   X,
@@ -54,6 +55,11 @@ export default function SmartFoodPicker({
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [barcodeVal, setBarcodeVal] = useState('');
+  const [cameraScanning, setCameraScanning] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanLoopRef = useRef(null);
 
   const [selectedFood, setSelectedFood] = useState(null);
   const [grams, setGrams] = useState(100);
@@ -147,27 +153,98 @@ export default function SmartFoodPicker({
     return getVariedRecipesForFood(activeFood, profile, customRecipes, 4);
   }, [activeFood, profile, customRecipes, onSelectRecipeSuggestion]);
 
+  const stopCameraScanner = useCallback(() => {
+    if (scanLoopRef.current) {
+      clearInterval(scanLoopRef.current);
+      scanLoopRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraScanning(false);
+  }, []);
+
+  useEffect(() => {
+    return () => stopCameraScanner();
+  }, [stopCameraScanner]);
+
+  const lookupBarcodeCode = useCallback(
+    async (rawCode) => {
+      const code = String(rawCode || '').trim();
+      if (!code) return;
+      stopCameraScanner();
+      setRemoteLoading(true);
+      try {
+        const prod = await fetchProductByBarcode(code);
+        if (prod) {
+          registerExternalFoods([prod]);
+          if (onCacheExternalFood) await onCacheExternalFood(prod);
+          setSelectedFood(prod);
+          setGrams(prod.defaultGrams || 100);
+          setBarcodeOpen(false);
+          setBarcodeVal('');
+        } else {
+          alert('Aucun produit trouvé pour ce code-barres.');
+        }
+      } catch {
+        alert('Recherche code-barres indisponible hors-ligne.');
+      } finally {
+        setRemoteLoading(false);
+      }
+    },
+    [onCacheExternalFood, stopCameraScanner]
+  );
+
+  const startCameraScanner = async () => {
+    setCameraError('');
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Caméra non disponible sur cet appareil — saisis le code ci-dessous.');
+      return;
+    }
+    if (!('BarcodeDetector' in window)) {
+      setCameraError('Lecture optique directe non supportée par ce navigateur — saisis le code EAN.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraScanning(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 60);
+
+      const detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'],
+      });
+
+      scanLoopRef.current = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) return;
+        try {
+          const codes = await detector.detect(videoRef.current);
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            if (navigator.vibrate) navigator.vibrate(40);
+            lookupBarcodeCode(codes[0].rawValue);
+          }
+        } catch {
+          // Frame ignorée
+        }
+      }, 280);
+    } catch {
+      setCameraError('Accès caméra refusé — utilise la saisie manuelle.');
+      stopCameraScanner();
+    }
+  };
+
   const handleBarcodeLookup = async (e) => {
     e.preventDefault();
-    if (!barcodeVal.trim()) return;
-    setRemoteLoading(true);
-    try {
-      const prod = await fetchProductByBarcode(barcodeVal.trim());
-      if (prod) {
-        registerExternalFoods([prod]);
-        if (onCacheExternalFood) await onCacheExternalFood(prod);
-        setSelectedFood(prod);
-        setGrams(prod.defaultGrams || 100);
-        setBarcodeOpen(false);
-        setBarcodeVal('');
-      } else {
-        alert('Aucun produit trouvé pour ce code-barres.');
-      }
-    } catch {
-      alert('Recherche code-barres indisponible hors-ligne.');
-    } finally {
-      setRemoteLoading(false);
-    }
+    await lookupBarcodeCode(barcodeVal);
   };
 
   const handleConfirm = async () => {
@@ -219,28 +296,63 @@ export default function SmartFoodPicker({
 
         <button
           type="button"
-          onClick={() => setBarcodeOpen((v) => !v)}
+          onClick={() => {
+            if (barcodeOpen) stopCameraScanner();
+            setBarcodeOpen((v) => !v);
+          }}
           className="btn-secondary !py-2.5 !px-3 !text-xs shrink-0"
-          title="Code-barres EAN"
+          title="Scanner ou saisir un code-barres EAN"
         >
-          <ScanBarcode className="w-4 h-4 text-emerald-400" />
+          <ScanBarcode className="w-4 h-4 text-[var(--text-secondary)]" />
         </button>
       </div>
 
       {barcodeOpen && (
-        <form onSubmit={handleBarcodeLookup} className="flex items-center gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={barcodeVal}
-            onChange={(e) => setBarcodeVal(e.target.value)}
-            placeholder="Code-barres EAN-13 (ex: 3017620422003)"
-            className="input-dark !py-2 text-xs font-mono"
-          />
-          <button type="submit" className="btn-accent !py-2 !px-3.5 !text-xs shrink-0">
-            OK
-          </button>
-        </form>
+        <div className="rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] p-3 space-y-2.5 animate-fade-in">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-[var(--text-secondary)]">
+              Code-barres produit (EAN)
+            </span>
+            <button
+              type="button"
+              onClick={() => (cameraScanning ? stopCameraScanner() : startCameraScanner())}
+              className="btn-secondary !py-1 !px-2.5 !text-[11px]"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>{cameraScanning ? 'Arrêter caméra' : 'Scanner via caméra'}</span>
+            </button>
+          </div>
+
+          {cameraScanning && (
+            <div className="relative rounded-lg overflow-hidden bg-black aspect-video max-h-40">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              <div className="inset-x-8 top-1/2 -translate-y-1/2 h-0.5 bg-[var(--accent)]/80 absolute pointer-events-none" />
+            </div>
+          )}
+
+          {cameraError && (
+            <p className="text-[11px] text-[var(--text-muted)]">{cameraError}</p>
+          )}
+
+          <form onSubmit={handleBarcodeLookup} className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={barcodeVal}
+              onChange={(e) => setBarcodeVal(e.target.value)}
+              placeholder="Ou saisir l'EAN-13 (ex: 3017620422003)"
+              className="input-dark !py-2 text-xs tabular-nums !bg-[var(--bg-card)]"
+            />
+            <button type="submit" className="btn-primary !py-2 !px-3.5 !text-xs shrink-0">
+              OK
+            </button>
+          </form>
+        </div>
       )}
 
       {/* Catégories prédéfinies glissables */}

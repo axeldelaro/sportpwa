@@ -105,6 +105,7 @@ export default function App() {
   // Initialisation synchrone garantie dès la milliseconde 0 pour le Coach IA
   const [coachMessages, setCoachMessages] = useState(() => loadCoachMessagesSync());
   const [bodyMetrics, setBodyMetrics] = useState([]);
+  const [allNutritionLogs, setAllNutritionLogs] = useState([]);
 
   const [subModalState, setSubModalState] = useState({
     isOpen: false,
@@ -159,6 +160,7 @@ export default function App() {
         wkHist,
         tLog,
         selLog,
+        allNLogs,
         shop,
         cRecs,
         cWks,
@@ -169,6 +171,7 @@ export default function App() {
         getAllWorkoutHistory(),
         getNutritionLogByDate(todayStr),
         getNutritionLogByDate(selectedDate),
+        getAllNutritionLogs(),
         getShoppingList(),
         getCustomRecipes(),
         getCustomWorkouts(),
@@ -180,6 +183,7 @@ export default function App() {
       setWorkoutHistory(wkHist);
       setTodayDayLog(tLog);
       setSelectedDayLog(selLog);
+      setAllNutritionLogs(allNLogs);
       setShoppingItems(shop);
       setCustomRecipes(cRecs);
       setCustomWorkouts(cWks);
@@ -324,6 +328,7 @@ export default function App() {
     if (saved.date === todayStr) {
       setTodayDayLog(saved);
     }
+    setAllNutritionLogs(await getAllNutritionLogs());
   };
 
   const todayMacros = useMemo(() => computeDayTotals(todayDayLog), [todayDayLog]);
@@ -427,6 +432,54 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [todayStr]
   );
+
+  const handleApplyWeeklyPlan = async (plan, missingItemsToBuy = []) => {
+    if (!plan?.days?.length) return;
+    for (const day of plan.days) {
+      const formattedMeals = {
+        breakfast: [],
+        lunch: [],
+        snack: [],
+        dinner: [],
+      };
+      Object.entries(day.meals || {}).forEach(([slotId, meal], idx) => {
+        if (!meal?.items?.length || !formattedMeals[slotId]) return;
+        formattedMeals[slotId].push({
+          entryId: `meal_${Date.now()}_${day.dayIndex}_${slotId}_${idx}`,
+          recipeId: meal.recipeId || null,
+          title: meal.title,
+          isRecipe: true,
+          portionMultiplier: meal.portionMultiplier || 1,
+          items: meal.items.map((it) => ({
+            foodId: it.foodId,
+            grams: it.grams,
+          })),
+        });
+      });
+
+      const dayRecord = {
+        date: day.dateStr,
+        meals: formattedMeals,
+      };
+      await saveNutritionLog(dayRecord);
+      if (day.dateStr === todayStr) {
+        setTodayDayLog(dayRecord);
+      }
+      if (day.dateStr === selectedDate) {
+        setSelectedDayLog(dayRecord);
+      }
+    }
+
+    if (missingItemsToBuy.length > 0) {
+      await mergeItemsIntoShoppingList(
+        missingItemsToBuy.map((it) => ({
+          foodId: it.foodId,
+          grams: it.totalGrams,
+        }))
+      );
+    }
+    setAllNutritionLogs(await getAllNutritionLogs());
+  };
 
   const handleStartWorkout = (workout, intensityMode = 'normal') => {
     const rawPrepared = buildActiveWorkoutExercises(workout, intensityMode);
@@ -810,6 +863,8 @@ export default function App() {
             onToggleFavoriteRecipe={handleToggleFavoriteRecipe}
             onSaveRecipeOverride={handleSaveRecipeOverride}
             onCopyPreviousDayMeals={handleCopyPreviousDayMeals}
+            onApplyWeeklyPlan={handleApplyWeeklyPlan}
+            allNutritionLogs={allNutritionLogs}
             customRecipes={customRecipes}
             onSaveCustomRecipe={handleSaveCustomRecipe}
             onDeleteCustomRecipe={handleDeleteCustomRecipe}
@@ -872,6 +927,8 @@ export default function App() {
       <ProfileModal
         isOpen={profileModalOpen}
         profile={profile}
+        bodyMetrics={bodyMetrics}
+        allNutritionLogs={allNutritionLogs}
         onClose={() => setProfileModalOpen(false)}
         onSaveProfile={handleSaveProfile}
         onSwitchToCloudRestore={() => setCloudVaultOpen(true)}
