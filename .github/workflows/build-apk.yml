@@ -106,12 +106,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-latest
-          name: Pulse — Application Android (APK)
+          name: Pulse — Entraînement & Nutrition (Android)
           body: |
-            ### Application Android autonome — Pulse
-            - **Fichier installable directement sur Android :** `Pulse.apk` (signé v1 + v2, compatible Android 6 à Android 15+)
-            - **100 % autonome hors-ligne :** intègre les **2 972 aliments ANSES CIQUAL**, les **144 exercices animés**, le **Générateur de semaine**, le **Coach embarqué** et la **Synchronisation Cloud chiffrée**.
-            - Généré automatiquement depuis le commit `${{ github.sha }}`.
+            ### Pulse — Entraînement & Nutrition sur Android
+            - **Téléchargement direct :** `Pulse.apk` (compatible Android 6 à Android 15+)
+            - **Contenu complet intégré :** séances guidées et exercices animés, près de 3 000 aliments courants, générateur de repas sur la semaine, liste de courses automatique et Coach sportif & nutrition.
           files: Pulse.apk
           prerelease: false
           make_latest: true

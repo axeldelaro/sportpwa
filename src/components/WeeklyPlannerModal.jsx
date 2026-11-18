@@ -52,7 +52,20 @@ export default function WeeklyPlannerModal({
   const [activeDayIdx, setActiveDayIdx] = useState(0);
   const [expandedSlotKey, setExpandedSlotKey] = useState(null);
   const [alreadyOwnedMissingIds, setAlreadyOwnedMissingIds] = useState([]);
-  const [plan, setPlan] = useState(null);
+  const [plan, setPlan] = useState(() =>
+    isOpen
+      ? generateWeeklyMealPlan({
+          pantryFoodIds: ['poulet_blanc', 'riz_basmati_cru', 'oeufs_entiers'],
+          daysCount: 7,
+          mealsPerDay: 4,
+          batchCooking: false,
+          startDateStr,
+          lang,
+          profile,
+          customRecipes,
+        })
+      : null
+  );
 
   // Initialise avec des aliments de base compatibles avec le profil (ex: vegan -> tofu, lentilles, avoine)
   useEffect(() => {

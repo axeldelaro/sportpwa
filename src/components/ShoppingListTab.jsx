@@ -263,6 +263,7 @@ export default function ShoppingListTab({
               max="5000"
               step="5"
               value={gramsInput}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => setGramsInput(e.target.value)}
               className="w-12 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
             />

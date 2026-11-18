@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
-  ShieldCheck,
-  Lock,
+  User,
   LogOut,
   RefreshCw,
   CloudUpload,
@@ -14,7 +13,6 @@ import {
   UserCheck,
 } from 'lucide-react';
 import {
-  evaluatePasswordStrength,
   registerUserAccount,
   loginUserAccount,
   syncPushAccountToCloud,
@@ -48,11 +46,6 @@ export default function CloudVaultModal({
     }
   }, [isOpen, activeAccount]);
 
-  const pwdStrength = useMemo(
-    () => evaluatePasswordStrength(password),
-    [password]
-  );
-
   if (!isOpen) return null;
 
   const handleAuthSubmit = async (e) => {
@@ -78,13 +71,12 @@ export default function CloudVaultModal({
         setFeedback({
           type: 'ok',
           msg: res.alreadyExisted
-            ? `Compte @${res.identity.username} retrouvé en ligne et synchronisé !`
-            : `Compte @${res.identity.username} créé et sauvegardé sur le Cloud (${res.relaysReached || 1} serveurs) ! Tu peux maintenant t'y connecter depuis ton téléphone ou PC.`,
+            ? `Bon retour @${res.identity.username} ! Ton suivi est synchronisé.`
+            : `Bienvenue @${res.identity.username} ! Tu peux retrouver ton suivi sur tous tes appareils.`,
         });
         return;
       }
 
-      // Connexion en ligne multi-appareils
       const res = await loginUserAccount(username, password);
       if (res.payload) {
         await onRestoreFullBackup(res.payload);
@@ -93,12 +85,12 @@ export default function CloudVaultModal({
       setPassword('');
       setFeedback({
         type: 'ok',
-        msg: `Connecté à @${res.identity.username} ! Toutes tes données Cloud sont synchronisées.`,
+        msg: `Connecté à @${res.identity.username}. Ton suivi est à jour.`,
       });
     } catch (err) {
       setFeedback({
         type: 'err',
-        msg: err.message || 'Erreur de connexion.',
+        msg: err.message || 'Impossible de se connecter.',
       });
     } finally {
       setBusy(false);
@@ -115,12 +107,12 @@ export default function CloudVaultModal({
       if (res.ok) {
         setFeedback({
           type: 'ok',
-          msg: `Sauvegarde Cloud effectuée avec succès (${res.relays} serveurs répliqués) !`,
+          msg: 'Ton suivi a bien été sauvegardé en ligne.',
         });
       } else {
         setFeedback({
           type: 'err',
-          msg: 'Sauvegardé en local (connexion réseau momentanément indisponible).',
+          msg: 'Enregistré sur cet appareil (connexion Internet indisponible).',
         });
       }
     } catch (err) {
@@ -140,12 +132,12 @@ export default function CloudVaultModal({
         await onRestoreFullBackup(latestPayload);
         setFeedback({
           type: 'ok',
-          msg: 'Dernières données du Cloud récupérées avec succès sur cet appareil !',
+          msg: 'Ton suivi est à jour sur cet appareil.',
         });
       } else {
         setFeedback({
           type: 'err',
-          msg: 'Aucune sauvegarde plus récente trouvée en ligne.',
+          msg: 'Aucune mise à jour plus récente disponible.',
         });
       }
     } catch (err) {
@@ -156,20 +148,20 @@ export default function CloudVaultModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="w-full max-w-md max-h-[90vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
-        {/* En-tête */}
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+      <div className="w-full max-w-md max-h-[90vh] card-elevated rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
+        {/* En-tête simple et naturel */}
         <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-emerald-400/15 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <div className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center">
+              <User className="w-4 h-4 text-[var(--text-primary)]" />
             </div>
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                Compte En Ligne & Synchronisation
+                Mon compte
               </h2>
-              <p className="text-[11px] text-[var(--text-muted)]">
-                Multi-appareils PC & Mobile · Chiffré AES-256-GCM
+              <p className="text-xs text-[var(--text-muted)]">
+                Retrouve tes séances et tes repas sur téléphone ou PC
               </p>
             </div>
           </div>
@@ -177,26 +169,24 @@ export default function CloudVaultModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+            className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ================================================================= */}
-        {/* VUE A : COMPTE CONNECTÉ EN LIGNE                                  */}
-        {/* ================================================================= */}
+        {/* VUE A : COMPTE CONNECTÉ */}
         {activeAccount ? (
           <div className="overflow-y-auto p-5 space-y-4">
-            <div className="p-4 rounded-2xl bg-emerald-400/10 border border-emerald-400/25 flex items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/65 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <UserCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
                     @{activeAccount.username}
                   </p>
-                  <p className="text-[11px] text-emerald-400">
-                    Synchronisation Cloud automatique active
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Synchronisation automatique activée
                   </p>
                 </div>
               </div>
@@ -206,14 +196,14 @@ export default function CloudVaultModal({
                 onClick={async () => {
                   if (
                     window.confirm(
-                      'Se déconnecter de cet appareil ? Tu pourras te reconnecter à tout moment avec ton identifiant et mot de passe.'
+                      'Se déconnecter de cet appareil ? Tu pourras te reconnecter à tout moment avec ton identifiant et ton mot de passe.'
                     )
                   ) {
                     await onAccountLockedOut();
                     onClose();
                   }
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-[var(--text-primary)] hover:text-rose-400 transition-colors shrink-0"
+                className="btn-secondary !py-1.5 !px-3 !text-xs shrink-0"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Déconnexion
@@ -221,7 +211,7 @@ export default function CloudVaultModal({
             </div>
 
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed px-0.5">
-              Connecte-toi simplement avec <strong>@{activeAccount.username}</strong> et ton mot de passe sur ton téléphone, tablette ou PC pour retrouver instantanément tout ton profil, tes repas et tes séances.
+              Utilise simplement ton identifiant <strong className="font-medium text-[var(--text-primary)]">@{activeAccount.username}</strong> et ton mot de passe sur un autre appareil pour récupérer tes objectifs, tes repas et ton historique d’entraînement.
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -229,14 +219,14 @@ export default function CloudVaultModal({
                 type="button"
                 disabled={busy}
                 onClick={handleManualPush}
-                className="btn-accent !py-2.5 !text-xs"
+                className="btn-secondary !py-2.5 !text-xs"
               >
                 {busy ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <CloudUpload className="w-4 h-4" />
                 )}
-                Sauvegarder Cloud
+                Sauvegarder
               </button>
 
               <button
@@ -250,13 +240,13 @@ export default function CloudVaultModal({
                 ) : (
                   <CloudDownload className="w-4 h-4" />
                 )}
-                Actualiser Cloud
+                Actualiser
               </button>
             </div>
 
             {feedback && (
               <div
-                className={`p-3 rounded-2xl text-xs flex items-center gap-2 ${
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
                   feedback.type === 'ok'
                     ? 'bg-emerald-400/15 text-emerald-400 border border-emerald-400/30'
                     : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
@@ -268,9 +258,7 @@ export default function CloudVaultModal({
             )}
           </div>
         ) : (
-          /* ================================================================= */
-          /* VUE B : CONNEXION / INSCRIPTION EN LIGNE (USER + MOT DE PASSE)    */
-          /* ================================================================= */
+          /* VUE B : CONNEXION / CRÉATION DE COMPTE */
           <form onSubmit={handleAuthSubmit} className="overflow-y-auto p-5 space-y-4">
             <div className="grid grid-cols-2 seg-control">
               <button
@@ -298,14 +286,14 @@ export default function CloudVaultModal({
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-[var(--text-secondary)] mb-1">
-                  Identifiant utilisateur
+                  Identifiant
                 </label>
                 <input
                   type="text"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="ex: axel"
+                  placeholder="ex : axel"
                   autoComplete="username"
                   className="input-dark"
                 />
@@ -313,7 +301,7 @@ export default function CloudVaultModal({
 
               <div>
                 <label className="block text-xs text-[var(--text-secondary)] mb-1">
-                  Mot de passe {authTab === 'register' ? '(6+ caractères)' : ''}
+                  Mot de passe {authTab === 'register' ? '(6 caractères min.)' : ''}
                 </label>
                 <div className="relative">
                   <input
@@ -335,21 +323,6 @@ export default function CloudVaultModal({
                     {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-
-                {authTab === 'register' && password.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex items-center justify-between text-[10.5px] text-[var(--text-muted)]">
-                      <span>Sécurité : {pwdStrength.label}</span>
-                      <span className="tabular-nums">~{pwdStrength.bits} bits</span>
-                    </div>
-                    <div className="h-1 w-full bg-[var(--bg-subtle)] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${pwdStrength.color}`}
-                        style={{ width: `${(pwdStrength.score / 4) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               {authTab === 'register' && (
@@ -372,7 +345,7 @@ export default function CloudVaultModal({
 
             {feedback && (
               <div
-                className={`p-3 rounded-2xl text-xs space-y-2 leading-relaxed ${
+                className={`p-3 rounded-xl text-xs space-y-2 leading-relaxed ${
                   feedback.type === 'ok'
                     ? 'bg-emerald-400/15 text-emerald-400 border border-emerald-400/30'
                     : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
@@ -394,7 +367,7 @@ export default function CloudVaultModal({
                       }}
                       className="btn-secondary w-full !py-1.5 !px-3 !text-xs"
                     >
-                       Passer sur « Créer un compte » avec cet identifiant →
+                      Créer ce compte maintenant →
                     </button>
                   )}
               </div>
@@ -404,15 +377,12 @@ export default function CloudVaultModal({
               {busy ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Synchronisation en cours...
+                  Connexion en cours...
                 </>
+              ) : authTab === 'register' ? (
+                'Créer mon compte'
               ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5" />
-                  {authTab === 'register'
-                    ? 'Créer mon compte en ligne'
-                    : 'Se connecter et synchroniser'}
-                </>
+                'Me connecter'
               )}
             </button>
           </form>

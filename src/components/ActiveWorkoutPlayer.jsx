@@ -658,6 +658,7 @@ export default function ActiveWorkoutPlayer({
                       max="600"
                       step="5"
                       value={row.durationSeconds || 40}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         handleUpdateSetField(
                           currentExIdx,
@@ -691,6 +692,7 @@ export default function ActiveWorkoutPlayer({
                       max="500"
                       step="0.5"
                       value={row.weightKg}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         handleUpdateSetField(currentExIdx, sIdx, 'weightKg', e.target.value)
                       }
@@ -703,6 +705,7 @@ export default function ActiveWorkoutPlayer({
                       min="1"
                       max="200"
                       value={row.reps}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         handleUpdateSetField(currentExIdx, sIdx, 'reps', e.target.value)
                       }
@@ -762,8 +765,19 @@ export default function ActiveWorkoutPlayer({
       </div>
 
       {restTimer.active && (
-        <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 backdrop-blur-2xl px-5 py-4 shrink-0 animate-slide-up">
-          <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
+        <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 backdrop-blur-2xl shrink-0 animate-slide-up">
+          <div className="h-[2px] w-full bg-[var(--bg-subtle)] overflow-hidden">
+            <div
+              className="h-full bg-emerald-400 transition-all duration-700 ease-linear"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.max(0, (restTimer.remaining / Math.max(1, restTimer.total)) * 100)
+                )}%`,
+              }}
+            />
+          </div>
+          <div className="max-w-lg mx-auto px-5 py-4 flex items-center justify-between gap-4">
             <div>
               <span className="text-[11px] text-emerald-400 font-medium block">
                 Repos

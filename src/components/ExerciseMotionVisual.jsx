@@ -140,7 +140,7 @@ export function detectMovementArchetype(exercise = {}) {
  */
 const ARCHETYPE_RIGS = {
   squat: {
-    label: 'Flexion Polyarticulaire',
+    label: 'Squat & Jambes',
     activeLimb: 'legs',
     dur: '2.7s',
     equip: 'barbell_back',
@@ -153,7 +153,7 @@ const ARCHETYPE_RIGS = {
     wrist: [[118, 50], [112, 82]],
   },
   lunge: {
-    label: 'Fente Unilatérale',
+    label: 'Fente',
     activeLimb: 'legs',
     dur: '2.7s',
     equip: 'dumbbells_hand',
@@ -168,7 +168,7 @@ const ARCHETYPE_RIGS = {
     wrist: [[122, 92], [122, 116]],
   },
   hinge_rdl: {
-    label: 'Charnière de Hanche (Hinge)',
+    label: 'Bassin & Ischios',
     activeLimb: 'posterior',
     dur: '2.9s',
     equip: 'barbell_hand',
@@ -259,7 +259,7 @@ const ARCHETYPE_RIGS = {
     wrist: [[112, 58], [118, 16]],
   },
   lateral_raise: {
-    label: 'Abduction Scapulaire',
+    label: 'Épaules Latérales',
     activeLimb: 'shoulders',
     dur: '2.5s',
     equip: 'front_dumbbells',
@@ -341,7 +341,7 @@ const ARCHETYPE_RIGS = {
     wrist: [[142, 60], [122, 102]],
   },
   hanging_leg_raise: {
-    label: 'Enroulement Pelvien',
+    label: 'Relevé de Jambes',
     activeLimb: 'core',
     dur: '2.7s',
     equip: 'roman_backrest',
@@ -354,7 +354,7 @@ const ARCHETYPE_RIGS = {
     wrist: [[138, 68], [138, 68]],
   },
   core_plank: {
-    label: 'Gainage Anti-Extension',
+    label: 'Gainage Abdos',
     activeLimb: 'core',
     dur: '2.9s',
     equip: 'ab_wheel',
@@ -820,13 +820,13 @@ export default function ExerciseMotionVisual({
             </div>
           )}
 
-          {/* Barre de cadence respiratoire & tempo */}
+          {/* Barre de cadence respiratoire */}
           <div className="absolute bottom-3 left-3 flex items-center gap-2">
             <div className="w-14 h-1 rounded-full bg-[var(--border-strong)] overflow-hidden">
               <div className="h-full w-full bg-[var(--accent)] bio-tempo-bar" />
             </div>
             <span className="text-[10.5px] tabular-nums text-[var(--text-muted)]">
-              Tempo 2-1-1
+              Mouvement contrôlé
             </span>
           </div>
         </>

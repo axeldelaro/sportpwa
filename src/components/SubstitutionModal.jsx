@@ -47,7 +47,7 @@ export default function SubstitutionModal({
     protein: 'Mêmes protéines',
     carbs: 'Mêmes glucides',
     fat: 'Mêmes lipides',
-    kcal: 'Mêmes calories',
+    kcal: 'Par nutriment',
   };
 
   return (
@@ -108,7 +108,7 @@ export default function SubstitutionModal({
                   mode === 'iso_kcal' ? 'seg-item-active' : ''
                 }`}
               >
-                Iso-calorique
+                Mêmes calories
               </button>
             </div>
 
@@ -119,6 +119,7 @@ export default function SubstitutionModal({
                 max="1500"
                 step="5"
                 value={grams}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => setGrams(Math.max(5, Number(e.target.value) || 5))}
                 className="w-12 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
               />

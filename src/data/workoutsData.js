@@ -1109,14 +1109,14 @@ export const WORKOUT_PROGRAMS = [
       },
       {
         id: 'wk_mob_mcgill_spine',
-        title: 'Protocole Big 3 McGill — Blindage Lombaire',
+        title: 'Renforcement Bas du Dos & Gainage Doux',
         durationMin: 16,
         targetMuscles: ['Carré des lombes', 'Transverse', 'Lombaires'],
         equipment: 'Tapis de sol',
         exercises: [
           {
             id: 'ex_mcgill_curlup',
-            name: 'Curl-Up modifié de McGill',
+            name: 'Relevé de buste doux (Curl-Up)',
             type: 'timed',
             sets: 3,
             durationSeconds: 40,

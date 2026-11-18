@@ -946,6 +946,7 @@ export default function NutritionTab({
                                           min="1"
                                           max="1500"
                                           value={it.grams}
+                                          onFocus={(e) => e.target.select()}
                                           onChange={(e) =>
                                             handleUpdateIngredientGrams(
                                               slot.id,
@@ -1033,7 +1034,7 @@ export default function NutritionTab({
               <div className="grid grid-cols-3 seg-control">
                 {[
                   { id: 'recipes', label: `Recettes (${allRecipes.length})` },
-                  { id: 'foods', label: 'Ingrédients (3M+)' },
+                  { id: 'foods', label: 'Ingrédients' },
                   { id: 'create_recipe', label: 'Créer recette' },
                 ].map((t) => {
                   const active = drawerTab === t.id;

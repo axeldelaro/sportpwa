@@ -145,6 +145,83 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [activeTab]);
 
+  // Navigation naturelle avec le geste Retour Android (ferme la fenêtre active ou revient à Aujourd'hui)
+  const hasBackLayer =
+    workoutPlayerOpen ||
+    subModalState.isOpen ||
+    cloudVaultOpen ||
+    (profileModalOpen && Boolean(profile?.onboardingCompleted)) ||
+    activeTab !== 'dashboard';
+
+  const backStateRef = useRef({
+    workoutPlayerOpen,
+    subModalOpen: subModalState.isOpen,
+    cloudVaultOpen,
+    profileClosable: profileModalOpen && Boolean(profile?.onboardingCompleted),
+    activeTab,
+  });
+  backStateRef.current = {
+    workoutPlayerOpen,
+    subModalOpen: subModalState.isOpen,
+    cloudVaultOpen,
+    profileClosable: profileModalOpen && Boolean(profile?.onboardingCompleted),
+    activeTab,
+  };
+  const historyGuardArmedRef = useRef(false);
+  const ignoreNextPopRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (hasBackLayer && !historyGuardArmedRef.current) {
+      window.history.pushState({ pulseGuard: true }, '');
+      historyGuardArmedRef.current = true;
+    } else if (!hasBackLayer && historyGuardArmedRef.current) {
+      historyGuardArmedRef.current = false;
+      ignoreNextPopRef.current = true;
+      window.history.back();
+    }
+  }, [hasBackLayer]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onPopState = () => {
+      historyGuardArmedRef.current = false;
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      const cur = backStateRef.current;
+      let stillHasLayer = false;
+      if (cur.workoutPlayerOpen) {
+        setWorkoutPlayerOpen(false);
+        stillHasLayer =
+          cur.subModalOpen ||
+          cur.cloudVaultOpen ||
+          cur.profileClosable ||
+          cur.activeTab !== 'dashboard';
+      } else if (cur.subModalOpen) {
+        setSubModalState((prev) => ({ ...prev, isOpen: false }));
+        stillHasLayer =
+          cur.cloudVaultOpen || cur.profileClosable || cur.activeTab !== 'dashboard';
+      } else if (cur.cloudVaultOpen) {
+        setCloudVaultOpen(false);
+        stillHasLayer = cur.profileClosable || cur.activeTab !== 'dashboard';
+      } else if (cur.profileClosable) {
+        setProfileModalOpen(false);
+        stillHasLayer = cur.activeTab !== 'dashboard';
+      } else if (cur.activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+        stillHasLayer = false;
+      }
+      if (stillHasLayer) {
+        window.history.pushState({ pulseGuard: true }, '');
+        historyGuardArmedRef.current = true;
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault();

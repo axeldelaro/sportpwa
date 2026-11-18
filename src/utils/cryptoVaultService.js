@@ -113,7 +113,7 @@ function checkRateLimit(username) {
   if (entry && entry.lockedUntil && Date.now() < entry.lockedUntil) {
     const waitSec = Math.ceil((entry.lockedUntil - Date.now()) / 1000);
     throw new Error(
-      `Sécurité anti-brute-force : réessaie dans ${waitSec}s après plusieurs échecs.`
+      `Trop de tentatives consécutives. Réessaie dans ${waitSec}s.`
     );
   }
 }
@@ -282,7 +282,7 @@ async function encryptPayloadToEnvelope(aesKey, username, dataObject) {
 async function decryptEnvelopeToPayload(aesKey, username, envelopeStr) {
   const env = typeof envelopeStr === 'string' ? safeJsonParse(envelopeStr, null) : envelopeStr;
   if (!env || !env.iv || !env.ct) {
-    throw new Error('Enveloppe chiffrée invalide.');
+    throw new Error('Données de sauvegarde non reconnues.');
   }
 
   const iv = base64ToBytes(env.iv);
@@ -297,7 +297,7 @@ async function decryptEnvelopeToPayload(aesKey, username, envelopeStr) {
 
   const jsonStr = await decompressBytes(new Uint8Array(plainBuf), env.c === 1);
   const parsed = safeJsonParse(jsonStr, null);
-  if (!parsed) throw new Error('Données déchiffrées invalides.');
+  if (!parsed) throw new Error('Données de sauvegarde non reconnues.');
   return parsed;
 }
 
@@ -688,7 +688,7 @@ export async function registerUserAccount(rawUsername, password, initialBackupDa
 
   if (ackCount === 0) {
     throw new Error(
-      'Impossible de joindre les serveurs Cloud (vérifie ta connexion Internet avant de créer ton compte en ligne).'
+      'Vérifie ta connexion Internet avant de créer ton compte.'
     );
   }
 
@@ -778,7 +778,7 @@ export async function loginUserAccount(rawUsername, password) {
   }
 
   throw new Error(
-    `Aucun compte "@${username}" trouvé en ligne. Bascule sur l'onglet « Créer un compte » pour l'enregistrer sur le Cloud !`
+    `Aucun compte "@${username}" trouvé. Passe sur « Créer un compte » pour t'inscrire.`
   );
 }
 

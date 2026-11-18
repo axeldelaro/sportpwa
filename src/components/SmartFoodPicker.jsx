@@ -193,7 +193,7 @@ export default function SmartFoodPicker({
           alert('Aucun produit trouvé pour ce code-barres.');
         }
       } catch {
-        alert('Recherche code-barres indisponible hors-ligne.');
+        alert('Impossible de rechercher ce code-barres sans connexion.');
       } finally {
         setRemoteLoading(false);
       }
@@ -208,7 +208,7 @@ export default function SmartFoodPicker({
       return;
     }
     if (!('BarcodeDetector' in window)) {
-      setCameraError('Lecture optique directe non supportée par ce navigateur — saisis le code EAN.');
+      setCameraError('Caméra non prise en charge ici — saisis le numéro ci-dessous.');
       return;
     }
     try {
@@ -312,7 +312,7 @@ export default function SmartFoodPicker({
             setBarcodeOpen((v) => !v);
           }}
           className="btn-secondary !py-2.5 !px-3 !text-xs shrink-0"
-          title="Scanner ou saisir un code-barres EAN"
+          title="Scanner un produit"
         >
           <ScanBarcode className="w-4 h-4 text-[var(--text-secondary)]" />
         </button>
@@ -322,7 +322,7 @@ export default function SmartFoodPicker({
         <div className="rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] p-3 space-y-2.5 animate-fade-in">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
-              Code-barres produit (EAN)
+              Scanner un produit
             </span>
             <button
               type="button"
@@ -356,7 +356,7 @@ export default function SmartFoodPicker({
               inputMode="numeric"
               value={barcodeVal}
               onChange={(e) => setBarcodeVal(e.target.value)}
-              placeholder="Ou saisir l'EAN-13 (ex: 3017620422003)"
+              placeholder="Numéro sous le code-barres"
               className="input-dark !py-2 text-xs tabular-nums !bg-[var(--bg-card)]"
             />
             <button type="submit" className="btn-primary !py-2 !px-3.5 !text-xs shrink-0">
@@ -406,7 +406,7 @@ export default function SmartFoodPicker({
               }`}
             >
               <span className="truncate">
-                Utiliser « {autoSynthesizedFood.name} » (macros estimées)
+                Utiliser « {autoSynthesizedFood.name} »
               </span>
               <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0">
                 {autoSynthesizedFood.per100g.kcal} kcal/100g
@@ -418,7 +418,7 @@ export default function SmartFoodPicker({
         {localFoods.length > 0 && (
           <div className="space-y-0.5">
             <p className="section-eyebrow px-1 pb-1">
-              Catalogue hors-ligne ({totalCompatibleCount.toLocaleString('fr-FR')} aliments)
+              Tous les aliments ({totalCompatibleCount.toLocaleString('fr-FR')})
             </p>
             {localFoods.map((f) => {
               const isSelected = activeFood?.id === f.id;
@@ -479,7 +479,7 @@ export default function SmartFoodPicker({
           <div className="space-y-1 pt-2 border-t border-[var(--border-subtle)]">
             <p className="text-[10.5px] font-bold text-emerald-400 px-1 flex items-center gap-1.5">
               <Globe className="w-3 h-3" />
-              <span>Base mondiale Open Food Facts (3M+)</span>
+              <span>Autres produits trouvés</span>
               {remoteLoading && <Loader2 className="w-3 h-3 animate-spin" />}
             </p>
             {remoteFoods.map((f) => {
@@ -540,6 +540,7 @@ export default function SmartFoodPicker({
                 min="1"
                 max="2000"
                 value={grams}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => setGrams(e.target.value)}
                 className="w-14 bg-transparent text-right text-xs font-semibold tabular-nums text-[var(--text-primary)] focus:outline-none"
               />

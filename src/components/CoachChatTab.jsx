@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowUp,
   RotateCcw,
-  BookOpen,
-  ExternalLink,
   Play,
   Plus,
   Check,
@@ -161,10 +159,10 @@ export default function CoachChatTab({
           </h1>
           <p className="text-xs text-[var(--text-muted)]">
             {lang === 'en'
-              ? 'Offline engine · ISSN & ACSM references'
+              ? 'Personalized workouts, meals & guidance'
               : lang === 'es'
-                ? 'Motor sin conexión · Referencias ISSN y ACSM'
-                : 'Moteur autonome hors-ligne · Références ISSN & ACSM'}
+                ? 'Entrenos, comidas y consejos personalizados'
+                : 'Séances, idées de repas et conseils sur-mesure'}
           </p>
         </div>
 
@@ -271,25 +269,6 @@ export default function CoachChatTab({
                   </>
                 )}
               </div>
-
-              {!isUser && Array.isArray(msg.sources) && msg.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-w-[90%] pl-0.5">
-                  {msg.sources.map((src) => (
-                    <a
-                      key={src.id}
-                      href={src.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                      title={src.localizedSummary}
-                    >
-                      <BookOpen className="w-3 h-3 shrink-0" />
-                      <span>{src.citation}</span>
-                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}

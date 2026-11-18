@@ -239,9 +239,9 @@ function tryParseMultiFoodNutritionQuery(userMessage, norm) {
 
   return {
     text:
-      `**Calcul Nutritionnel de Précision (CIQUAL / USDA)** :\n\n` +
+      `**Détail nutritionnel** :\n\n` +
       lines.join('\n') +
-      `\n\n**Total exact :** **${totals.kcal} kcal** · **${totals.protein}g Protéines** · **${totals.carbs}g Glucides** · **${totals.fat}g Lipides** *(Fibres : ${totals.fiber}g)*`,
+      `\n\n**Total :** **${totals.kcal} kcal** · **${totals.protein}g Protéines** · **${totals.carbs}g Glucides** · **${totals.fat}g Lipides** *(Fibres : ${totals.fiber}g)*`,
     mealAction: {
       title: title.trim(),
       kcal: totals.kcal,
@@ -406,7 +406,7 @@ function tryComposeCustomWorkoutFromPrompt(userMessage, norm, profile) {
 
   const workoutObj = {
     id: `ai_wk_${Date.now()}`,
-    title: `Séance IA — ${focusTitle} (${durationMin} min)`,
+    title: `Séance sur-mesure — ${focusTitle} (${durationMin} min)`,
     durationMin,
     targetMuscles: Array.from(new Set(selected.map((s) => s.muscle))).slice(0, 4),
     equipment: activeEq.length > 0 ? 'Adapté à ton matériel' : 'Tous équipements',
@@ -420,9 +420,9 @@ function tryComposeCustomWorkoutFromPrompt(userMessage, norm, profile) {
 
   return {
     text:
-      `**${workoutObj.title}** construite sur-mesure (${selected.length} mouvements ordonnés par priorité biomécanique) :\n\n` +
+      `**${workoutObj.title}** (${selected.length} exercices) :\n\n` +
       lines.join('\n') +
-      `\n\n*Conserve 1 à 2 répétitions en réserve (RIR 1–2) sur les premières séries pour tenir tout le volume avec une technique irréprochable.*`,
+      `\n\n*Garde 1 à 2 répétitions de marge sur les premières séries pour tenir toute la séance avec une belle exécution.*`,
     workoutAction: workoutObj,
     exerciseDemo: selected[0],
     memory: { lastIntent: 'ai_workout_builder' },
@@ -466,12 +466,12 @@ function tryLookupSpecificExercise(norm) {
 
   return {
     text:
-      `**Fiche Technique & Biomécanique — ${bestEx.name}** :\n\n` +
+      `**Conseils d'exécution — ${bestEx.name}** :\n\n` +
       `• **Muscles ciblés :** **${bestEx.muscle}**\n` +
-      `• **Exécution stricte :** ${bestEx.cue}\n` +
-      `• **Cadence idéale :** descente contrôlée sur **2 secondes** (phase excentrique), point stable sans rebond, puis poussée/tirage explosif en expirant.\n` +
-      `• **Dosage recommandé :** **${bestEx.sets} séries × ${bestEx.type === 'timed' ? `${bestEx.durationSeconds}s` : `${bestEx.targetReps} reps`}** avec **${bestEx.restSeconds}s de repos**` +
-      (bestEx.alternative ? `\n• **Alternative directe :** *${bestEx.alternative}*` : ''),
+      `• **Repère technique :** ${bestEx.cue}\n` +
+      `• **Rythme :** descente contrôlée sur **2 secondes**, marque un court arrêt sans rebond, puis remonte en soufflant.\n` +
+      `• **Séries conseillées :** **${bestEx.sets} séries × ${bestEx.type === 'timed' ? `${bestEx.durationSeconds}s` : `${bestEx.targetReps} reps`}** avec **${bestEx.restSeconds}s de repos**` +
+      (bestEx.alternative ? `\n• **Variante :** *${bestEx.alternative}*` : ''),
     exerciseDemo: bestEx,
     memory: { lastIntent: 'exercise_tech' },
   };
@@ -568,7 +568,7 @@ const MUSCLE_GUIDES = [
       '1. **Tractions pronation ou Tirage vertical prise neutre** : 3–4 × 6–10 reps *(tire les coudes vers les hanches)*\n' +
       '2. **Rowing T-Bar ou Rowing haltère unilatéral** : 3–4 × 8–12 reps *(trapèzes moyens & rhomboïdes)*\n' +
       '3. **Pull-over poulie haute ou Face Pull** : 3 × 15 reps *(finition grand dorsal & santé scapulaire)*',
-    tip: 'Laisse tes omoplates s’étirer complètement en haut du mouvement avant chaque tirage (Wolf et al., 2023).',
+    tip: 'Laisse tes omoplates s’étirer complètement en haut du mouvement avant chaque tirage.',
   },
   {
     keys: ['bras', 'biceps', 'triceps', 'avant bras', 'arms', 'curl'],
@@ -999,12 +999,12 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'greeting' && norm.split(' ').length <= 6) {
     return {
       text:
-        `Salut **${profile.name || 'Athlète'}** ! Je suis ton **Coach IA embarqué** (100 % autonome, sans quota ni limite).\n\n` +
-        `Demande-moi avec précision ce dont tu as besoin :\n` +
+        `Salut **${profile.name || 'Athlète'}** ! Je suis là pour t'aider sur tes séances et tes repas.\n\n` +
+        `Demande-moi simplement ce dont tu as besoin :\n` +
         `• **« Crée-moi une séance dos & bras à la chaise romaine de 35 min »** *(lancement direct en 1 clic)*\n` +
-        `• **« Macros de 3 œufs, 70g d'avoine et 1 banane »** *(calcul exact + ajout au journal)*\n` +
+        `• **« Macros de 3 œufs, 70g d'avoine et 1 banane »** *(calcul + ajout au journal)*\n` +
         `• **« Repas à 650 kcal »** ou **« Menu complet pour mes ${targets.kcal} kcal »**\n` +
-        `• **« Comment exécuter le Hip Thrust / Soulevé de terre ? »** *(avec démonstration animée)*`,
+        `• **« Comment exécuter le Hip Thrust / Soulevé de terre ? »** *(avec mouvement animé)*`,
       sources: [SCIENTIFIC_STUDIES[0], SCIENTIFIC_STUDIES[4]].map((s) => ({
         ...s,
         localizedSummary: s.summary[lang] || s.summary.fr,
@@ -1052,9 +1052,9 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Journée alimentaire sur-mesure (${totalK} kcal · ${totalP}g P)** calibrée sur ta cible (${targets.kcal} kcal, adaptée à tes goûts) :\n\n` +
+        `**Journée alimentaire sur-mesure (${totalK} kcal · ${totalP}g P)** adaptée à ton objectif (${targets.kcal} kcal) :\n\n` +
         lines.join('\n') +
-        `\n\n*Consensus ISSN (Jäger et al., 2017) : 4 prises protéiques espacées de 3–4h maximisent la synthèse musculaire sur 24h.*`,
+        `\n\n*Répartir tes protéines sur 3 à 4 repas dans la journée aide à mieux récupérer.*`,
       sources: retrieveScientificEvidence('proteine repartition repas', lang, 2),
       suggestions: defaultSugs.slice(0, 4),
       memory: { lastIntent: 'full_day_menu' },
@@ -1069,10 +1069,10 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Protocole Nutrition Avant & Après Séance (${weightKg} kg)** *(Aragon & Schoenfeld, 2013)* :\n\n` +
-        `• **1h30–2h30 AVANT :** **~${preCarbs}g glucides digestes** + **~${preProt}g protéines** pauvres en graisses *(ex: avoine + Skyr/Whey + banane)*. Si <30 min : 1 banane ou compote.\n` +
-        `• **Dans les 2h APRÈS :** **~${postProt}g protéines** + **~${postCarbs}g glucides** pour recharger le glycogène.\n` +
-        `• **À retenir :** espacer le repas pré-séance et post-séance de **4h maximum** suffit à maximiser 100 % de l'anabolisme.`,
+        `**Quoi manger avant et après ta séance (${weightKg} kg)** :\n\n` +
+        `• **1h30–2h30 AVANT :** **~${preCarbs}g glucides digestes** + **~${preProt}g protéines** légères *(ex: avoine + Skyr/Whey + banane)*. Si <30 min : 1 banane ou compote.\n` +
+        `• **Dans les 2h APRÈS :** **~${postProt}g protéines** + **~${postCarbs}g glucides** pour refaire le plein d'énergie.\n` +
+        `• **À retenir :** espacer ton repas d'avant et d'après séance de **4h maximum** suffit pour très bien récupérer.`,
       sources: retrieveScientificEvidence('avant seance apres seance fenetre anabolique', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'peri_workout' },
@@ -1086,9 +1086,9 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Protocole Hypertrophie — ${foundGuide.title}** *(10 à 16 séries/semaine)* :\n\n` +
+        `**Repères d'entraînement — ${foundGuide.title}** *(10 à 16 séries/semaine)* :\n\n` +
         `${foundGuide.exercises}\n\n` +
-        `**Clé biomécanique :** ${foundGuide.tip}`,
+        `**Conseil clé :** ${foundGuide.tip}`,
       exerciseDemo: demoEx,
       sources: retrieveScientificEvidence('amplitude etirement volume serie', lang, 2),
       suggestions: [
@@ -1103,10 +1103,10 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'progressive_overload') {
     return {
       text:
-        `**La Double Progression Scientifique** *(Plotkin et al., 2022 — PeerJ)* :\n\n` +
-        `1. Fixe une fourchette, ex: **3 × 8 à 12 reps** à RIR 1–2.\n` +
+        `**Progresser séance après séance (Double progression)** :\n\n` +
+        `1. Fixe une fourchette, par exemple **3 × 8 à 12 reps** en gardant 1 à 2 reps de marge.\n` +
         `2. Garde la **même charge** d'une séance à l'autre en gagnant +1 rep par série *(9-8-8 → 11-10-10 → 12-12-12)*.\n` +
-        `3. Dès que **3 × 12** est validé proprement, monte de **+2,5 kg** *(+1 kg sur l'isolation)* et repars à 8 reps.`,
+        `3. Dès que **3 × 12** passe proprement, monte de **+2,5 kg** *(+1 kg sur les petits muscles)* et repars à 8 reps.`,
       sources: retrieveScientificEvidence('surcharge double progression rir', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'progressive_overload' },
@@ -1116,9 +1116,9 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'warmup_mobility') {
     return {
       text:
-        `**Échauffement Salle en 8 minutes** *(Behm et al., 2016)* :\n\n` +
-        `• **3 min cardio progressif** (rameur/tapis incliné) + **2 min mobilité articulaire dynamique** *(aucun étirement statique long >60s avant les charges lourdes)*.\n` +
-        `• **3 séries de chauffe sur ton 1er polyarticulaire :** **50 % × 8 reps** → **75 % × 4 reps** → **90 % × 1–2 reps explosives**, repos 2 min puis 1re série effective.`,
+        `**Échauffement efficace en 8 minutes** :\n\n` +
+        `• **3 min cardio progressif** (rameur, vélo ou tapis) + **2 min mobilité articulaire dynamique** *(évite les longs étirements statiques juste avant de porter lourd)*.\n` +
+        `• **3 séries de chauffe sur ton 1er mouvement :** **50 % × 8 reps** → **75 % × 4 reps** → **90 % × 1–2 reps**, repos 2 min puis attaque ta 1re série.`,
       sources: retrieveScientificEvidence('echauffement etirement mobilite', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'warmup_mobility' },
@@ -1129,9 +1129,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     const kcalPer8k = Math.round(weightKg * 4.2);
     return {
       text:
-        `**Dépense NEAT & Pas Quotidiens (${weightKg} kg)** *(Paluch et al., 2022 — The Lancet)* :\n\n` +
-        `• Viser **8 000 à 10 000 pas/jour** brûle **~${kcalPer8k} kcal/j** supplémentaires (~1,2 kg de gras/mois) sans creuser ta récupération nerveuse.\n` +
-        `• En salle : protocole **Marche Inclinée Zone 2** *(pente 10–12 %, 4,8 km/h, 20–30 min après la muscu)*.`,
+        `**Marche quotidienne & dépense active (${weightKg} kg)** :\n\n` +
+        `• Viser **8 000 à 10 000 pas/jour** brûle **~${kcalPer8k} kcal/j** supplémentaires sans fatiguer tes muscles ni creuser ta récupération.\n` +
+        `• En salle : **marche inclinée sur tapis** *(pente 10–12 %, 4,8 km/h, 20–30 min en fin de séance)*.`,
       sources: retrieveScientificEvidence('pas marche neat cardio', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'steps_neat' },
@@ -1141,9 +1141,9 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'cravings_cheat') {
     return {
       text:
-        `**Satiété & Gestion de Restaurant / Écart** *(Reynolds et al., 2019 — The Lancet)* :\n\n` +
-        `• **Collation coupe-faim (~220 kcal) :** 200g Skyr 0 % + 100g fruits rouges + 10g amandes (protéines lentes + fibres).\n` +
-        `• **Restaurant prévu ce soir :** fais un déjeuner riche en protéines maigres et légumes verts, profite sereinement de ton dîner, hydrate-toi bien et reprends ta routine normale demain matin.`,
+        `**Gérer une fringale ou un repas au restaurant** :\n\n` +
+        `• **Collation rassasiante (~220 kcal) :** 200g Skyr 0 % + 100g fruits rouges + 10g amandes (protéines + fibres).\n` +
+        `• **Restaurant prévu ce soir :** fais un déjeuner léger riche en protéines et légumes, profite sereinement de ton dîner, bois bien et reprends tes habitudes demain matin.`,
       sources: retrieveScientificEvidence('faim fringale satiete fibre', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'cravings_cheat' },
@@ -1154,9 +1154,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     const calc = calculateNutritionalTargets(profile);
     return {
       text:
-        `**Bilan Métabolique Exact (Mifflin-St Jeor)** :\n\n` +
-        `• **Métabolisme au repos (BMR) :** **${calc.bmr} kcal/j** · **Maintien (TDEE) :** **${calc.tdee} kcal/j**\n` +
-        `• **Cible active :** **${targets.kcal} kcal/j** → **${targets.protein}g P** *(${(targets.protein / weightKg).toFixed(1)} g/kg)* · **${targets.carbs}g G** · **${targets.fat}g L** · **${targets.waterMl} ml d'eau**.`,
+        `**Tes besoins quotidiens estimés** :\n\n` +
+        `• **Au repos :** **${calc.bmr} kcal/j** · **Maintien :** **${calc.tdee} kcal/j**\n` +
+        `• **Ton objectif actuel :** **${targets.kcal} kcal/j** → **${targets.protein}g P** *(${(targets.protein / weightKg).toFixed(1)} g/kg)* · **${targets.carbs}g G** · **${targets.fat}g L** · **${targets.waterMl} ml d'eau**.`,
       sources: retrieveScientificEvidence('metabolisme mifflin calorie proteine', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'macros_calc' },
@@ -1174,10 +1174,10 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `**Force Max (Équation d'Epley)** pour **${reps} reps à ${load} kg** :\n\n` +
-        `• **1RM théorique :** **${est1Rm} kg**\n` +
+        `**Charge maximale estimée (1RM)** pour **${reps} reps à ${load} kg** :\n\n` +
+        `• **Max sur 1 répétition :** **${est1Rm} kg**\n` +
         `• **Force (85 % — 4–6 reps) :** **${Math.round(est1Rm * 0.85)} kg**\n` +
-        `• **Hypertrophie (75 % — 8–12 reps) :** **${Math.round(est1Rm * 0.75)} kg**\n` +
+        `• **Volume musculaire (75 % — 8–12 reps) :** **${Math.round(est1Rm * 0.75)} kg**\n` +
         `• **Endurance / Technique (65 %) :** **${Math.round(est1Rm * 0.65)} kg**`,
       sources: retrieveScientificEvidence('repos force serie rir', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
@@ -1189,9 +1189,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     const fcMax = Math.round(208 - 0.7 * ageYears);
     return {
       text:
-        `**Zones Cardiaques Tanaka (${ageYears} ans → FCmax ≈ ${fcMax} bpm)** :\n\n` +
-        `• **Zone 2 (Oxydation lipidique & mitochondries) :** **${Math.round(fcMax * 0.65)} à ${Math.round(fcMax * 0.75)} bpm**\n` +
-        `• **Zone 4–5 (VO2max / HIIT) :** **${Math.round(fcMax * 0.85)} à ${Math.round(fcMax * 0.92)} bpm**`,
+        `**Repères cardio (${ageYears} ans → fréquence max ≈ ${fcMax} bpm)** :\n\n` +
+        `• **Endurance douce (Zone 2) :** **${Math.round(fcMax * 0.65)} à ${Math.round(fcMax * 0.75)} bpm** *(rythme où tu peux encore parler)*\n` +
+        `• **Fractionné intense :** **${Math.round(fcMax * 0.85)} à ${Math.round(fcMax * 0.92)} bpm**`,
       sources: retrieveScientificEvidence('cardio zone 2 hiit', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'cardio_zones' },
@@ -1228,11 +1228,11 @@ export function generateCoachResponse(userMessage, context = {}) {
 
         return {
           text:
-            `Équivalences pour **${result.sourceGrams}g de ${targetFood.name}** *(${result.sourceMacros.kcal} kcal, ${result.sourceMacros.protein}g P, ${result.sourceMacros.carbs}g G)* en mode **${result.equivalenceLabel}** :\n\n` +
+            `Équivalences pour **${result.sourceGrams}g de ${targetFood.name}** *(${result.sourceMacros.kcal} kcal, ${result.sourceMacros.protein}g P, ${result.sourceMacros.carbs}g G)* — **${result.equivalenceLabel}** :\n\n` +
             lines.join('\n'),
           sources: evidence,
           suggestions: [
-            mode === 'dominant_macro' ? 'Et en mode iso-calorique ?' : 'Et en macro dominante ?',
+            mode === 'dominant_macro' ? 'Et à calories égales ?' : 'Et par nutriment principal ?',
             `Et pour ${roundToNearest5g(result.sourceGrams * 1.5)}g ?`,
             'Combler mes protéines du jour',
           ],
@@ -1250,11 +1250,11 @@ export function generateCoachResponse(userMessage, context = {}) {
     const creatDose = Math.max(3, Math.min(5, Math.round(weightKg * 0.05)));
     return {
       text:
-        `**Compléments validés pour ${weightKg} kg (Consensus ISSN & CIO)** :\n\n` +
-        `• **Créatine Monohydrate :** **${creatDose}g/jour** tous les jours au repas (Niveau A).\n` +
-        `• **Caféine :** **${Math.round(weightKg * 3)}–${Math.round(weightKg * 5)} mg** 45 min pré-séance (éviter <6h avant sommeil).\n` +
-        `• **Whey / Protéine végétale :** uniquement par praticité pour boucler tes **${targets.protein}g P/j**.\n` +
-        `• **Santé :** Vitamine D3, Oméga-3 (1–2g EPA/DHA) & Magnésium bisglycinate. *(BCAA superflus si quota protéique atteint).*`,
+        `**Compléments utiles pour ${weightKg} kg** :\n\n` +
+        `• **Créatine Monohydrate :** **${creatDose}g/jour** tous les jours au repas.\n` +
+        `• **Caféine :** **${Math.round(weightKg * 3)}–${Math.round(weightKg * 5)} mg** 45 min avant la séance (évite en fin d'après-midi).\n` +
+        `• **Whey / Protéine végétale :** pratique uniquement pour t'aider à atteindre tes **${targets.protein}g P/j**.\n` +
+        `• **Au quotidien :** Vitamine D3, Oméga-3 & Magnésium. *(Les BCAA sont inutiles si tu atteins déjà ton total de protéines).*`,
       sources: retrieveScientificEvidence('creatine cafeine bcaa omega', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'supplements' },
@@ -1264,7 +1264,7 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'program_choice') {
     return {
       text:
-        `**Structure optimale selon ta fréquence (${WORKOUT_PROGRAMS.length} programmes prêts dans l'onglet Séances)** :\n\n` +
+        `**Choisir ton rythme selon tes disponibilités (${WORKOUT_PROGRAMS.length} programmes dans l'onglet Séances)** :\n\n` +
         `• **2–3x / sem :** *Full Body Poids du Corps*, *Anneaux/TRX* ou *Haltères Maison*\n` +
         `• **3–4x / sem :** *Callisthénie & Chaise Romaine*, *Full Élastiques* ou *Upper / Lower*\n` +
         `• **5–6x / sem :** *Push / Pull / Legs (PPL)*\n\n` +
@@ -1282,7 +1282,7 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'protein_gap') {
     if (remProt <= 5) {
       return {
-        text: `Cible protéique atteinte (**${Math.round(todayMacros.protein)}g / ${targets.protein}g**) ! Il te reste **${remWater} ml d'eau** à boire d'ici ce soir.`,
+        text: `Objectif protéines atteint (**${Math.round(todayMacros.protein)}g / ${targets.protein}g**) ! Il te reste **${remWater} ml d'eau** à boire d'ici ce soir.`,
         sources: evidence,
         suggestions: defaultSugs.slice(0, 3),
         memory: { lastIntent: 'protein_gap' },
@@ -1304,7 +1304,7 @@ export function generateCoachResponse(userMessage, context = {}) {
 
     return {
       text:
-        `Il te manque **${remProt}g de protéines** aujourd'hui (${Math.max(0, remKcal)} kcal disponibles). Voici 3 options immédiates :\n\n` +
+        `Il te manque **${remProt}g de protéines** aujourd'hui (${Math.max(0, remKcal)} kcal disponibles). Voici 3 idées rapides :\n\n` +
         optLines.join('\n'),
       mealAction: picks[0]
         ? (() => {
@@ -1313,7 +1313,7 @@ export function generateCoachResponse(userMessage, context = {}) {
             );
             const m = calculateFoodMacros(picks[0], g);
             return {
-              title: `Boost Protéines (${picks[0].name})`,
+              title: `Collation Protéinée (${picks[0].name})`,
               kcal: m.kcal,
               protein: m.protein,
               items: [{ foodId: picks[0].id, grams: g }],
@@ -1340,10 +1340,10 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'joint_pain') {
     return {
       text:
-        `**Adaptation Biomécanique Sans Douleur** *(consulte un professionnel de santé si douleur aiguë)* :\n\n` +
-        `• **Épaule :** privilégie la **prise neutre aux haltères** dans le plan scapulaire (coudes 35°), le *Floor Press* et le *Face Pull*.\n` +
-        `• **Genou :** remplace les sauts/fentes avant par des **fentes arrière contrôlées** (tibia vertical), du **Hip Thrust** et de la **Chaise isométrique au mur**.\n` +
-        `• **Lombaires :** **Rowing poitrine appuyée**, **Presse/Squat Bulgare** et protocole **Big 3 de McGill**.`,
+        `**Adapter tes exercices en cas de gêne** *(consulte un professionnel de santé si la douleur persiste)* :\n\n` +
+        `• **Épaule :** privilégie la **prise neutre aux haltères** (paumes face à face), le développé au sol et les tirages vers le visage.\n` +
+        `• **Genou :** remplace les sauts et fentes avant par des **fentes arrière contrôlées**, du **Hip Thrust** et de la **chaise au mur**.\n` +
+        `• **Bas du dos :** privilégie le **rowing buste appuyé**, la **presse ou le squat bulgare** et le **gainage doux**.`,
       sources: retrieveScientificEvidence('douleur lombaire epaule genou mcgill', lang, 2),
       suggestions: defaultSugs.slice(0, 3),
       memory: { lastIntent: 'joint_pain' },
@@ -1353,8 +1353,8 @@ export function generateCoachResponse(userMessage, context = {}) {
   if (intent === 'fatigue_sleep') {
     return {
       text:
-        `**Autorégulation de la Séance (Fatigue / Sommeil court)** :\n\n` +
-        `• Active le mode **« -25 % »** dans l'onglet Séances et arrête tes séries à **RIR 2** (*Refalo et al., 2023*) : tu préserves 100 % du signal musculaire sans épuiser ton système nerveux central.\n` +
+        `**Adapter ta séance en cas de fatigue** :\n\n` +
+        `• Passe en mode **« -25 % »** dans l'onglet Séances et garde **2 répétitions de marge** sur tes séries : tu entretiens tes progrès sans t'épuiser.\n` +
         `• Si tu n'as que 20 min : dis-moi *« Crée-moi une séance de 20 min »* !`,
       sources: retrieveScientificEvidence('sommeil fatigue courbature rir', lang, 2),
       suggestions: ['Crée-moi une séance Full Body de 20 min', ...defaultSugs.slice(0, 2)],
@@ -1367,9 +1367,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     const sec = evidence[1];
     return {
       text:
-        `**Réponse Scientifique Personnalisée (${weightKg} kg · ${targets.kcal} kcal/j) :**\n\n` +
-        `• **${main.citation}** : ${main.localizedSummary}\n` +
-        (sec ? `• **${sec.citation}** : ${sec.localizedSummary}\n` : '') +
+        `**Conseils adaptés (${weightKg} kg · ${targets.kcal} kcal/j) :**\n\n` +
+        `• ${main.localizedSummary}\n` +
+        (sec ? `• ${sec.localizedSummary}\n` : '') +
         `\n**Aujourd'hui :** il te reste **${Math.max(0, remKcal)} kcal**, **${Math.max(0, remProt)}g P** et **${remWater} ml d'eau**.`,
       sources: evidence,
       suggestions: defaultSugs.slice(0, 4),
@@ -1401,9 +1401,9 @@ export function generateCoachResponse(userMessage, context = {}) {
 
   return {
     text:
-      `**Synthèse (${profile.name || 'Athlète'} · ${targets.kcal} kcal/j)**\n\n` +
-      `• **Référence scientifique (${evidence[0].citation}) :** ${evidence[0].localizedSummary}\n\n` +
-      `*Astuce : demande-moi précisément **« Crée une séance [muscles/matériel] de 35 min »**, **« Macros de [tes aliments] »**, **« Repas à [X] kcal »** ou **« Comment faire [nom d'exercice] »** !*`,
+      `**Repère utile (${profile.name || 'Athlète'} · ${targets.kcal} kcal/j)**\n\n` +
+      `• ${evidence[0].localizedSummary}\n\n` +
+      `*Astuce : demande-moi par exemple **« Crée une séance [muscles/matériel] de 35 min »**, **« Macros de [tes aliments] »**, **« Repas à [X] kcal »** ou **« Comment faire [nom d'exercice] »** !*`,
     sources: evidence,
     suggestions: defaultSugs.slice(0, 4),
     memory: { lastIntent: 'summary' },

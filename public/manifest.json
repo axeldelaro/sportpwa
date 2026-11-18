@@ -1,7 +1,7 @@
 {
   "name": "Pulse — Entraînement & Nutrition",
   "short_name": "Pulse",
-  "description": "Suivi d'entraînement biomécanique, journal nutritionnel précis et coaching autonome.",
+  "description": "Séances guidées, suivi des repas, recettes et accompagnement sportif.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

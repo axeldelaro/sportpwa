@@ -1,30 +1,30 @@
-# Pulse — Entraînement & Nutrition (PWA Offline-First)
+# Pulse — Entraînement & Nutrition
 
-**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **près de 3 000 aliments officiels ANSES CIQUAL 100 % hors-ligne (+ 3 millions+ Open Food Facts + synthèse universelle)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
+**Pulse** est une application mobile et web d'entraînement et de nutrition au design sobre et lisible : **3 ambiances (Sombre, Noir, Clair)**, **exercices animés**, **près de 3 000 aliments du quotidien**, **générateur de menus sur la semaine**, **liste de courses automatique** et **Coach intégré**.
 
-- **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
-- **Téléchargement direct APK Android (signé via GitHub Actions) :** https://github.com/axeldelaro/sportpwa/releases/download/apk-latest/Pulse.apk
+- **Application Web :** https://axeldelaro.github.io/sportpwa/
+- **Application Android (`Pulse.apk`) :** https://github.com/axeldelaro/sportpwa/releases/download/apk-latest/Pulse.apk
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa
 
 ---
 
-## Points Forts (V7 — Édition Éditoriale)
+## Fonctionnalités principales
 
-1. **Direction Artistique Sobre & Humaine (Sombre, Noir OLED, Clair) :**
-   - Typographie **Inter** à chiffres tabulaires (`tabular-nums`), surfaces mattes finement étagées sans néon ni surcharge visuelle, contrôles segmentés tactiles, contrastes d'encre nets et accent **Sauge minérale** mesuré.
-   - Illustrations biomécaniques et anatomiques adaptatives aux thèmes sombre et clair.
+1. **Suivi quotidien clair & personnalisable :**
+   - Vue directe sur tes calories, protéines, glucides, lipides, ton hydratation, l'évolution de ton poids et ta prochaine séance.
+   - Trois thèmes adaptés à tous les écrans : *Sombre*, *Noir* et *Clair*.
 
-2. **Générateur de Semaine (« Du Placard au Menu ») & Recettes Dynamiques :**
-   - **Planificateur 3 / 5 / 7 jours (`WeeklyPlannerModal.jsx`)** : saisissez quelques ingrédients disponibles (*ex : poulet, riz, œufs*) pour composer automatiquement la semaine complète calée sur vos macros (mode *Varié* ou *Batch Cooking 2j*), distinguer ce que vous possédez déjà (`✓`) de **ce qu'il vous manque (`+`)**, et envoyer les manquants aux courses en 1 clic.
-   - **Réactualisation intégrale des recettes** (`resolveDynamicRecipe`) et **4 suggestions culinaires variées par repas** pour chacun des 302+ aliments hors-ligne et produits Open Food Facts (+ **scan caméra EAN en direct**).
+2. **Repas, Recettes & Générateur de semaine :**
+   - **Près de 3 000 aliments courants** disponibles immédiatement, scan de code-barres produit et création automatique pour tout plat saisi.
+   - **Recettes adaptatives** selon tes préférences et les ingrédients que tu ne manges pas, avec **4 idées de repas variées** par aliment.
+   - **Générateur de semaine (3, 5 ou 7 jours)** : indique quelques ingrédients que tu as chez toi pour générer tes menus et obtenir automatiquement la liste de ce qu'il te manque pour les courses.
 
-3. **Démonstrations Biomécaniques, Récupération & Outils Salle :**
-   - Moteur cinématique vectoriel articulé (`ExerciseMotionVisual.jsx`) adaptatif aux thèmes sur **les 144 exercices** + **courbe de progression personnelle (1RM)** sur chaque fiche mouvement.
-   - **Carte de récupération musculaire & volume effectif 7 jours**, **anti-veille écran (`Wake Lock`)**, **retour haptique**, **séries avancées (`#` Normale / `E` Échauffement / `D` Drop-set)**, **calculateur de disques olympiques (`20 kg`)** et **métabolisme réel observé (`TDEE adaptatif`)**.
+3. **Programmes & Séances guidées :**
+   - **144 exercices illustrés en mouvement**, filtrables par discipline (poids du corps, callisthénie, salle, haltères, élastiques, chaise romaine...) et selon ton matériel.
+   - Suivi en direct pendant la séance : chronomètre de repos, pré-remplissage de tes charges précédentes, aide aux disques de barre, records personnels et suivi de récupération sur 7 jours.
 
-4. **Coach IA Compositionnel Embarqué (100 % Autonome & Sans Quota En Ligne) :**
-   - **Générateur de séances en langage naturel**, **calculateur multi-aliments & unités naturelles**, **idées de recettes par ingrédient** (*« Idées de recettes avec du saumon »*) et **solveur de repas au gramme près**, avec boutons d'action directs dans le chat et **25 méta-analyses internationales (`ISSN`, `ACSM`, `IOC`, `The Lancet`, `PubMed`)**.
+4. **Coach Sport & Nutrition :**
+   - Création de séances sur-mesure à la demande, idées de repas selon tes calories restantes, équivalences entre aliments et conseils d'exécution.
 
-5. **Base Alimentaire Hors-Ligne Intégrale (2 970+ références ANSES CIQUAL) & Synchro Cloud (`AES-256-GCM`) :**
-   - **2 970+ aliments courants de magasin & cuisine 100 % hors-ligne** (`ciqualSupermarketCatalog.js` + catalogues essentiels) + **3 millions+ de produits Open Food Facts** & caméra EAN.
-   - Mémoire personnelle (`recipeOverrides`, `dislikedFoodIds`, `favoriteRecipeIds`, 14 équipements sportifs) synchronisée entre PC et smartphone par simple `Identifiant + Mot de passe`.
+5. **Synchronisation simple entre appareils :**
+   - Retrouve ton profil, tes séances, tes recettes favorites et ton journal sur téléphone ou ordinateur via l'espace **Mon compte**.

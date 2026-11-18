@@ -157,7 +157,7 @@ export function computeSubstitutions(
     protein: 'Protéines égales',
     carbs: 'Glucides égaux',
     fat: 'Lipides égaux',
-    kcal: 'Iso-Calorique',
+    kcal: 'Calories égales',
   };
 
   return {
@@ -166,7 +166,7 @@ export function computeSubstitutions(
     sourceMacros,
     mode,
     effectiveMacroKey,
-    equivalenceLabel: macroLabelsMap[effectiveMacroKey] || 'Iso-Calorique',
+    equivalenceLabel: macroLabelsMap[effectiveMacroKey] || 'Calories égales',
     swapGroupLabel: groupMeta.label,
     alternatives,
   };

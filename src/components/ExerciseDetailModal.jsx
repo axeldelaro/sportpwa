@@ -142,14 +142,14 @@ export default function ExerciseDetailModal({
               <span className="section-eyebrow block">Consigne d’exécution</span>
               <p className="text-xs sm:text-sm text-[var(--text-primary)] leading-relaxed">
                 {exercise.cue ||
-                  'Contrôle la phase excentrique sur 2 secondes, marque un point stable sans élan et expire lors de la poussée ou du tirage.'}
+                  'Contrôle la descente sur 2 secondes, marque un court arrêt sans élan et souffle lors de la poussée ou du tirage.'}
               </p>
             </div>
 
             <div className="rounded-xl bg-[var(--bg-subtle)]/30 border border-[var(--border-subtle)] p-3.5 flex items-start gap-2.5 text-xs text-[var(--text-secondary)]">
               <Info className="w-4 h-4 text-[var(--text-muted)] shrink-0 mt-0.5" />
               <span>
-                Conserve <strong className="text-[var(--text-primary)] font-medium">1 à 2 répétitions en réserve (RIR 1–2)</strong> et une amplitude complète sans compensation lombaire.
+                Garde <strong className="text-[var(--text-primary)] font-medium">1 à 2 répétitions de marge</strong> et conserve une amplitude complète sans cambrer le dos.
               </span>
             </div>
 

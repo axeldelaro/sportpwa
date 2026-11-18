@@ -5,7 +5,6 @@ import {
   SlidersHorizontal,
   Check,
   Smartphone,
-  Cloud,
   User,
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, tr } from '../i18n/translations';
@@ -49,8 +48,8 @@ export default function Header({
       const parsed = JSON.parse(text);
       await onImportJson(parsed);
       showToast('Données restaurées');
-    } catch (err) {
-      alert('JSON invalide : ' + (err.message || 'Erreur'));
+    } catch {
+      alert('Fichier de sauvegarde non reconnu.');
     } finally {
       e.target.value = '';
       setMenuOpen(false);
@@ -95,8 +94,8 @@ export default function Header({
               </>
             ) : (
               <>
-                <Cloud className="w-3.5 h-3.5 shrink-0" />
-                <span>Synchro</span>
+                <User className="w-3.5 h-3.5 shrink-0" />
+                <span>Compte</span>
               </>
             )}
           </button>
@@ -204,7 +203,7 @@ export default function Header({
                       className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                     >
                       <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Télécharger l’APK Android</span>
+                      <span>Application Android</span>
                     </a>
                   )}
 

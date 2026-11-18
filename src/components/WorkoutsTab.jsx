@@ -949,10 +949,10 @@ export default function WorkoutsTab({
           <div className="card-surface p-5 space-y-3.5">
             <div className="flex items-center justify-between">
               <span className="section-eyebrow">
-                Récupération & volume effectif (7 jours)
+                Récupération & séries (7 jours)
               </span>
               <span className="text-[11px] text-[var(--text-muted)]">
-                Cible ISSN : 10–20 séries
+                Repère hebdo : 10–20 séries
               </span>
             </div>
 
@@ -998,7 +998,7 @@ export default function WorkoutsTab({
 
           <div className="card-surface p-5 space-y-3.5">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
-              Estimateur 1RM (Formule d’Epley)
+              Charge maximale estimée (1RM)
             </span>
             <div className="grid grid-cols-3 gap-2.5 items-end">
               <div>
@@ -1010,6 +1010,7 @@ export default function WorkoutsTab({
                   min="1"
                   max="500"
                   value={rmWeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setRmWeight(e.target.value)}
                   className="input-dark !py-2 tabular-nums"
                 />
@@ -1023,6 +1024,7 @@ export default function WorkoutsTab({
                   min="1"
                   max="30"
                   value={rmReps}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setRmReps(e.target.value)}
                   className="input-dark !py-2 tabular-nums"
                 />
