@@ -119,13 +119,18 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('theme-amoled', 'theme-light', 'dark');
+    let metaColor = '#111214';
     if (theme === 'amoled') {
       root.classList.add('dark', 'theme-amoled');
+      metaColor = '#000000';
     } else if (theme === 'light') {
       root.classList.add('theme-light');
+      metaColor = '#f6f5f2';
     } else {
       root.classList.add('dark');
     }
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute('content', metaColor);
     saveTheme(theme);
   }, [theme]);
 
@@ -759,7 +764,7 @@ export default function App() {
         onTriggerInstall={handleTriggerPwaInstall}
       />
 
-      <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-5 pb-28">
+      <main className="flex-1 max-w-xl w-full mx-auto px-4 pt-4 pb-24">
         {activeTab === 'dashboard' && (
           <DashboardTab
             profile={profile}

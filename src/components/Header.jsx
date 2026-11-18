@@ -5,10 +5,7 @@ import {
   SlidersHorizontal,
   Check,
   Smartphone,
-  ShieldCheck,
   Cloud,
-  Globe,
-  Palette,
   User,
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, tr } from '../i18n/translations';
@@ -61,44 +58,45 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-[var(--bg-app)]/80 backdrop-blur-2xl border-b border-[var(--border-subtle)] pt-safe">
-      <div className="max-w-xl mx-auto px-5 h-16 flex items-center justify-between gap-3">
-        {/* Identité Club Pro */}
+    <header className="sticky top-0 z-30 bg-[var(--bg-app)]/88 backdrop-blur-xl border-b border-[var(--border-subtle)] pt-safe">
+      <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        {/* Marque minimaliste dessinée */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-emerald-400 flex items-center justify-center shadow-sm">
-            <div className="w-2.5 h-2.5 rounded-xs bg-zinc-950 rotate-45" />
+          <div className="w-7 h-7 rounded-[8px] bg-[var(--text-primary)] text-[var(--bg-app)] flex items-center justify-center">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M3 12.5h4.2l2.6-6 4.1 11 2.9-7.2 1.8 2.2H21"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
-          <div className="leading-none">
-            <span className="font-extrabold tracking-[0.14em] text-[var(--text-primary)] text-sm block">
-              PULSE
-            </span>
-            <span className="text-[9px] font-bold tracking-[0.18em] text-[var(--text-muted)] uppercase block mt-0.5">
-              Athletic Club
-            </span>
-          </div>
+          <span className="font-semibold tracking-tight text-[15px] text-[var(--text-primary)]">
+            Pulse
+          </span>
         </div>
 
-        {/* Barre d'actions épurée (zéro surcharge texte) */}
-        <div className="flex items-center gap-2 relative">
+        {/* Actions discrètes */}
+        <div className="flex items-center gap-1.5 relative">
           <button
             type="button"
             onClick={onOpenCloudVault}
-            className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-xs font-semibold transition-all ${
-              isLoggedIn
-                ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400'
-                : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             title={tr(lang, 'vault_title')}
           >
             {isLoggedIn ? (
               <>
-                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span className="max-w-[82px] truncate">@{activeAccount.username}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] shrink-0" />
+                <span className="max-w-[84px] truncate text-[var(--text-primary)]">
+                  @{activeAccount.username}
+                </span>
               </>
             ) : (
               <>
                 <Cloud className="w-3.5 h-3.5 shrink-0" />
-                <span>Cloud</span>
+                <span>Synchro</span>
               </>
             )}
           </button>
@@ -106,8 +104,8 @@ export default function Header({
           <button
             type="button"
             onClick={onOpenProfile}
-            className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-xs font-extrabold text-emerald-400 hover:border-emerald-400/40 transition-colors"
-            title="Mon profil biométrique & objectifs"
+            className="w-8 h-8 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] flex items-center justify-center text-xs font-semibold text-[var(--text-primary)] transition-colors"
+            title="Profil & objectifs"
           >
             {(profile?.name || 'A').charAt(0).toUpperCase()}
           </button>
@@ -115,35 +113,30 @@ export default function Header({
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="w-8 h-8 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             aria-label="Réglages"
           >
-            <SlidersHorizontal className="w-4 h-4" />
+            <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
 
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-12 z-50 w-68 card-elevated p-4 space-y-4 animate-fade-in">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 section-eyebrow px-1">
-                    <Palette className="w-3.5 h-3.5" />
-                    <span>Ambiance Studio</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-[var(--bg-subtle)]">
+              <div className="absolute right-0 top-10 z-50 w-64 card-elevated p-3.5 space-y-3.5 animate-fade-in">
+                <div className="space-y-1.5">
+                  <span className="section-eyebrow px-0.5 block">Apparence</span>
+                  <div className="grid grid-cols-3 seg-control">
                     {[
-                      { id: 'dark', label: 'Volt Club' },
-                      { id: 'amoled', label: 'Carbone' },
-                      { id: 'light', label: 'Ivoire' },
+                      { id: 'dark', label: 'Sombre' },
+                      { id: 'amoled', label: 'Noir' },
+                      { id: 'light', label: 'Clair' },
                     ].map((st) => (
                       <button
                         key={st.id}
                         type="button"
                         onClick={() => onSetTheme(st.id)}
-                        className={`py-1.5 rounded-xl text-[11px] font-bold transition-all ${
-                          theme === st.id
-                            ? 'bg-emerald-400 text-zinc-950'
-                            : 'text-[var(--text-secondary)]'
+                        className={`py-1.5 seg-item ${
+                          theme === st.id ? 'seg-item-active' : ''
                         }`}
                       >
                         {st.label}
@@ -152,40 +145,40 @@ export default function Header({
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 section-eyebrow px-1">
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Langue</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-[var(--bg-subtle)]">
+                <div className="space-y-1.5">
+                  <span className="section-eyebrow px-0.5 block">Langue</span>
+                  <div className="grid grid-cols-3 seg-control">
                     {SUPPORTED_LANGUAGES.map((l) => (
                       <button
                         key={l.id}
                         type="button"
                         onClick={() => onChangeLang(l.id)}
-                        className={`py-1.5 rounded-xl text-xs font-bold transition-all ${
-                          lang === l.id
-                            ? 'bg-emerald-400 text-zinc-950'
-                            : 'text-[var(--text-secondary)]'
+                        className={`py-1.5 uppercase seg-item ${
+                          lang === l.id ? 'seg-item-active' : ''
                         }`}
                       >
-                        {l.flag}
+                        {l.id}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="border-t border-[var(--border-subtle)] pt-2 space-y-1">
+                <div className="border-t border-[var(--border-subtle)] pt-2 space-y-0.5">
                   <button
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       onOpenProfile();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                   >
-                    <User className="w-4 h-4 text-emerald-400" />
-                    Profil & Cibles ({profile?.targets?.kcal || 2200} kcal)
+                    <span className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                      Profil & objectifs
+                    </span>
+                    <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                      {profile?.targets?.kcal || 2200} kcal
+                    </span>
                   </button>
 
                   {installPromptEvent && (
@@ -195,9 +188,9 @@ export default function Header({
                         setMenuOpen(false);
                         onTriggerInstall();
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                     >
-                      <Smartphone className="w-4 h-4 text-emerald-400" />
+                      <Smartphone className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                       {tr(lang, 'install_app')}
                     </button>
                   )}
@@ -205,18 +198,18 @@ export default function Header({
                   <button
                     type="button"
                     onClick={handleExportClick}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                     {tr(lang, 'export_json')}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
                   >
-                    <Upload className="w-4 h-4" />
+                    <Upload className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                     {tr(lang, 'import_json')}
                   </button>
                 </div>
@@ -235,7 +228,7 @@ export default function Header({
       </div>
 
       {statusToast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-emerald-400 text-zinc-950 text-xs font-bold shadow-xl flex items-center gap-1.5 animate-slide-up">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[var(--text-primary)] text-[var(--bg-app)] text-xs font-medium shadow-lg flex items-center gap-1.5 animate-slide-up">
           <Check className="w-3.5 h-3.5" />
           {statusToast}
         </div>

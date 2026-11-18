@@ -7,7 +7,7 @@ import {
   X,
   Plus,
   Ban,
-  Sparkles,
+  ChefHat,
   ChevronDown,
 } from 'lucide-react';
 import {
@@ -255,11 +255,7 @@ export default function SmartFoodPicker({
                 setGroupFilter(pill.id);
                 setSelectedFood(null);
               }}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all ${
-                active
-                  ? 'bg-emerald-400 text-zinc-950 font-bold'
-                  : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
-              }`}
+              className={active ? 'chip-active !py-1 !px-2.5 !text-[11px]' : 'chip !py-1 !px-2.5 !text-[11px]'}
             >
               {pill.label}
             </button>
@@ -270,9 +266,9 @@ export default function SmartFoodPicker({
       {/* Liste d'aliments */}
       <div className={`${compact ? 'max-h-40' : 'max-h-48'} overflow-y-auto space-y-2 pr-1`}>
         {localFoods.length > 0 && (
-          <div className="space-y-1">
-            <p className="section-eyebrow px-1">
-              Panel hors-ligne ({localFoods.length})
+          <div className="space-y-0.5">
+            <p className="section-eyebrow px-1 pb-1">
+              Catalogue hors-ligne ({localFoods.length})
             </p>
             {localFoods.map((f) => {
               const isSelected = activeFood?.id === f.id;
@@ -280,10 +276,10 @@ export default function SmartFoodPicker({
               return (
                 <div
                   key={f.id}
-                  className={`w-full px-3 py-2 rounded-2xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                  className={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                     isSelected
-                      ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-bold'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+                      ? 'bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-[var(--text-primary)] font-medium'
+                      : 'border border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/60'
                   }`}
                   onClick={() => {
                     setSelectedFood(f);
@@ -365,26 +361,28 @@ export default function SmartFoodPicker({
 
       {/* Panneau aliment actif + Suggestions de 4 Recettes Variées par type de repas */}
       {activeFood && (
-        <div className="rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-3.5 space-y-3">
+        <div className="rounded-xl bg-[var(--bg-subtle)]/75 border border-[var(--border-subtle)] p-3.5 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-[var(--text-primary)] truncate">
+              <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
                 {activeFood.name}
               </p>
-              <p className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
-                <strong className="text-emerald-400">{previewMacros.kcal} kcal</strong> ·{' '}
-                {previewMacros.protein}g P · {previewMacros.carbs}g G · {previewMacros.fat}g L
+              <p className="text-[11px] text-[var(--text-muted)] tabular-nums mt-0.5">
+                <strong className="font-semibold text-[var(--text-primary)]">
+                  {previewMacros.kcal} kcal
+                </strong>{' '}
+                · {previewMacros.protein}g P · {previewMacros.carbs}g G · {previewMacros.fat}g L
               </p>
             </div>
 
-            <div className="inline-flex items-center bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-2.5 py-1 shrink-0">
+            <div className="inline-flex items-center bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1 shrink-0">
               <input
                 type="number"
                 min="1"
                 max="2000"
                 value={grams}
                 onChange={(e) => setGrams(e.target.value)}
-                className="w-14 bg-transparent text-right text-xs font-bold font-mono text-[var(--text-primary)] focus:outline-none"
+                className="w-14 bg-transparent text-right text-xs font-semibold tabular-nums text-[var(--text-primary)] focus:outline-none"
               />
               <span className="text-[11px] text-[var(--text-muted)] ml-1">g</span>
             </div>
@@ -396,10 +394,10 @@ export default function SmartFoodPicker({
                 key={preset}
                 type="button"
                 onClick={() => setGrams(preset)}
-                className={`flex-1 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors ${
+                className={`flex-1 py-1 rounded-md text-[11px] tabular-nums font-medium transition-colors ${
                   Number(grams) === preset
-                    ? 'bg-emerald-400/20 text-emerald-400 border border-emerald-400/40'
-                    : 'bg-[var(--bg-app)]/60 text-[var(--text-secondary)]'
+                    ? 'bg-[var(--text-primary)] text-[var(--bg-app)]'
+                    : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                 }`}
               >
                 {preset}g
@@ -411,9 +409,9 @@ export default function SmartFoodPicker({
             <button
               type="button"
               onClick={handleConfirm}
-              className="btn-accent flex-1 !py-2.5 !text-xs"
+              className="btn-primary flex-1 !py-2 !text-xs"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               {actionLabel} ({Math.max(1, Math.round(Number(grams) || 100))}g)
             </button>
 
@@ -421,15 +419,15 @@ export default function SmartFoodPicker({
               <button
                 type="button"
                 onClick={() => setShowRecipeIdeas((v) => !v)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl text-xs font-bold border transition-all shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors shrink-0 ${
                   showRecipeIdeas
-                    ? 'bg-emerald-400/20 border-emerald-400/50 text-emerald-400'
-                    : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-primary)]'
+                    ? 'bg-[var(--bg-card)] border-[var(--border-strong)] text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
                 title="Voir 4 recettes variées utilisant cet aliment"
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{foodRecipeSuggestions.length} Recettes</span>
+                <ChefHat className="w-3.5 h-3.5" />
+                <span>{foodRecipeSuggestions.length} idées</span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform ${
                     showRecipeIdeas ? 'rotate-180' : ''
@@ -443,8 +441,8 @@ export default function SmartFoodPicker({
           {showRecipeIdeas && foodRecipeSuggestions.length > 0 && (
             <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2 animate-fade-in">
               <div className="flex items-center justify-between px-0.5">
-                <span className="section-eyebrow !text-emerald-400">
-                  Idées Recettes par Repas avec cet aliment
+                <span className="section-eyebrow">
+                  Suggestions par repas avec cet aliment
                 </span>
               </div>
 
@@ -452,21 +450,23 @@ export default function SmartFoodPicker({
                 {foodRecipeSuggestions.map((sug) => (
                   <div
                     key={sug.id}
-                    className="rounded-2xl bg-[var(--bg-app)]/85 border border-[var(--border-subtle)] p-3 flex items-center justify-between gap-3"
+                    className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
                         <span>{sug.slotBadge}</span>
                         <span className="text-[var(--text-muted)]">· {sug.prepMinutes} min</span>
                       </div>
-                      <h5 className="text-xs font-bold text-[var(--text-primary)] mt-0.5 line-clamp-1">
+                      <h5 className="text-xs font-semibold text-[var(--text-primary)] mt-0.5 line-clamp-1">
                         {sug.title}
                       </h5>
-                      <p className="text-[11px] font-mono text-[var(--text-secondary)] mt-0.5">
-                        <strong>{sug.macros.kcal} kcal</strong> · {sug.macros.protein}g P ·{' '}
-                        {sug.macros.carbs}g G · {sug.macros.fat}g L
+                      <p className="text-[11px] tabular-nums text-[var(--text-secondary)] mt-0.5">
+                        <strong className="font-semibold text-[var(--text-primary)]">
+                          {sug.macros.kcal} kcal
+                        </strong>{' '}
+                        · {sug.macros.protein}g P · {sug.macros.carbs}g G · {sug.macros.fat}g L
                       </p>
-                      <p className="text-[10.5px] text-[var(--text-muted)] truncate mt-0.5">
+                      <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
                         {sug.ingredients
                           .map((ing) => {
                             const f = getFoodById(ing.foodId);
@@ -480,7 +480,7 @@ export default function SmartFoodPicker({
                     <button
                       type="button"
                       onClick={() => handlePickSuggestedRecipe(sug)}
-                      className="btn-primary !py-2 !px-3 !text-xs shrink-0"
+                      className="btn-secondary !py-1.5 !px-3 !text-xs shrink-0"
                     >
                       Choisir
                     </button>

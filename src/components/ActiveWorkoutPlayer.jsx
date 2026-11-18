@@ -408,13 +408,13 @@ export default function ActiveWorkoutPlayer({
               key={ex.id || idx}
               type="button"
               onClick={() => setCurrentExIdx(idx)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={
                 isCurrent
-                  ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                  ? 'chip-active'
                   : allDone
-                  ? 'bg-emerald-400/15 text-emerald-400'
-                  : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
-              }`}
+                  ? 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-emerald-400/15 border border-emerald-400/30 text-emerald-400'
+                  : 'chip'
+              }
             >
               <span>{idx + 1}</span>
               <span className="max-w-[110px] truncate">{ex.name}</span>
@@ -629,10 +629,10 @@ export default function ActiveWorkoutPlayer({
                 <button
                   type="button"
                   onClick={() => handleToggleSetComplete(currentExIdx, sIdx)}
-                  className={`w-full py-2 rounded-full font-semibold text-xs flex items-center justify-center transition-all active:scale-95 ${
+                  className={`w-full py-2 rounded-xl font-medium text-xs flex items-center justify-center transition-all active:scale-95 ${
                     row.completed
-                      ? 'bg-emerald-400 text-zinc-950'
-                      : 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)]'
                   }`}
                 >
                   <Check className="w-4 h-4" />

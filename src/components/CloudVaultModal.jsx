@@ -272,18 +272,14 @@ export default function CloudVaultModal({
           /* VUE B : CONNEXION / INSCRIPTION EN LIGNE (USER + MOT DE PASSE)    */
           /* ================================================================= */
           <form onSubmit={handleAuthSubmit} className="overflow-y-auto p-5 space-y-4">
-            <div className="grid grid-cols-2 p-1 rounded-full bg-[var(--bg-subtle)]">
+            <div className="grid grid-cols-2 seg-control">
               <button
                 type="button"
                 onClick={() => {
                   setAuthTab('login');
                   setFeedback(null);
                 }}
-                className={`py-2 rounded-full text-xs font-semibold transition-all ${
-                  authTab === 'login'
-                    ? 'bg-emerald-400 text-zinc-950'
-                    : 'text-[var(--text-secondary)]'
-                }`}
+                className={`py-2 seg-item ${authTab === 'login' ? 'seg-item-active' : ''}`}
               >
                 Se connecter
               </button>
@@ -293,11 +289,7 @@ export default function CloudVaultModal({
                   setAuthTab('register');
                   setFeedback(null);
                 }}
-                className={`py-2 rounded-full text-xs font-semibold transition-all ${
-                  authTab === 'register'
-                    ? 'bg-emerald-400 text-zinc-950'
-                    : 'text-[var(--text-secondary)]'
-                }`}
+                className={`py-2 seg-item ${authTab === 'register' ? 'seg-item-active' : ''}`}
               >
                 Créer un compte
               </button>
@@ -400,7 +392,7 @@ export default function CloudVaultModal({
                         setConfirmPassword(password);
                         setFeedback(null);
                       }}
-                      className="w-full py-1.5 px-3 rounded-xl bg-emerald-400 text-zinc-950 font-semibold text-xs transition-transform active:scale-[0.99]"
+                      className="btn-secondary w-full !py-1.5 !px-3 !text-xs"
                     >
                        Passer sur « Créer un compte » avec cet identifiant →
                     </button>
@@ -408,15 +400,15 @@ export default function CloudVaultModal({
               </div>
             )}
 
-            <button type="submit" disabled={busy} className="btn-accent w-full py-3">
+            <button type="submit" disabled={busy} className="btn-primary w-full py-3">
               {busy ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Synchronisation Cloud en cours...
+                  Synchronisation en cours...
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" />
+                  <Lock className="w-3.5 h-3.5" />
                   {authTab === 'register'
                     ? 'Créer mon compte en ligne'
                     : 'Se connecter et synchroniser'}

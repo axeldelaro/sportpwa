@@ -12,29 +12,23 @@ export default {
       },
       fontFamily: {
         sans: [
-          '"Plus Jakarta Sans"',
+          '"Inter"',
           '-apple-system',
           'BlinkMacSystemFont',
-          '"SF Pro Display"',
+          '"SF Pro Text"',
           '"Segoe UI"',
           'sans-serif',
         ],
         mono: [
-          '"JetBrains Mono"',
-          'ui-monospace',
-          'SFMono-Regular',
-          'monospace',
+          '"Inter"',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
         ],
       },
-      colors: {
-        volt: {
-          DEFAULT: '#c8ff00',
-          dim: '#a3d900',
-        },
-      },
       animation: {
-        'fade-in': 'fadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
-        'slide-up': 'slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in': 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-up': 'slideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
         'pulse-soft': 'pulseSoft 2.6s ease-in-out infinite',
       },
       keyframes: {
@@ -43,7 +37,7 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(14px)' },
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseSoft: {

@@ -48,8 +48,8 @@ export default function SubstitutionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="w-full max-w-lg max-h-[88vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+      <div className="w-full max-w-lg max-h-[88vh] card-elevated rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
@@ -63,7 +63,7 @@ export default function SubstitutionModal({
               <button
                 type="button"
                 onClick={() => onToggleDislikedFood(sourceFood.id)}
-                className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
                   isFoodDislikedByProfile(sourceFood, profile)
                     ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
                     : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-rose-400'
@@ -79,7 +79,7 @@ export default function SubstitutionModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+            className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -87,14 +87,12 @@ export default function SubstitutionModal({
 
         <div className="p-4 border-b border-[var(--border-subtle)] space-y-3 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="grid grid-cols-2 flex-1 p-1 rounded-full bg-[var(--bg-subtle)]">
+            <div className="grid grid-cols-2 flex-1 seg-control">
               <button
                 type="button"
                 onClick={() => setMode('dominant_macro')}
-                className={`py-1.5 px-2.5 rounded-full text-xs font-medium transition-all ${
-                  mode === 'dominant_macro'
-                    ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                    : 'text-[var(--text-secondary)]'
+                className={`py-1.5 px-2.5 seg-item ${
+                  mode === 'dominant_macro' ? 'seg-item-active' : ''
                 }`}
               >
                 {dominantNameMap[result.effectiveMacroKey] || 'Macro dominante'}
@@ -103,17 +101,15 @@ export default function SubstitutionModal({
               <button
                 type="button"
                 onClick={() => setMode('iso_kcal')}
-                className={`py-1.5 px-2.5 rounded-full text-xs font-medium transition-all ${
-                  mode === 'iso_kcal'
-                    ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                    : 'text-[var(--text-secondary)]'
+                className={`py-1.5 px-2.5 seg-item ${
+                  mode === 'iso_kcal' ? 'seg-item-active' : ''
                 }`}
               >
                 Iso-calorique
               </button>
             </div>
 
-            <div className="inline-flex items-center bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-full px-3 py-1.5 shrink-0">
+            <div className="inline-flex items-center bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 shrink-0">
               <input
                 type="number"
                 min="5"
@@ -121,7 +117,7 @@ export default function SubstitutionModal({
                 step="5"
                 value={grams}
                 onChange={(e) => setGrams(Math.max(5, Number(e.target.value) || 5))}
-                className="w-12 bg-transparent text-right text-xs font-bold text-emerald-400 tabular-nums focus:outline-none"
+                className="w-12 bg-transparent text-right text-xs font-semibold text-[var(--text-primary)] tabular-nums focus:outline-none"
               />
               <span className="text-xs text-[var(--text-muted)] ml-1">g</span>
             </div>

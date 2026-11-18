@@ -391,7 +391,6 @@ function AnimLine({ p1, p2, dur, width = 7, color = '#e2e8f0', glow = false, ani
       stroke={color}
       strokeWidth={width}
       strokeLinecap="round"
-      style={glow ? { filter: 'drop-shadow(0 0 6px rgba(200,255,0,0.55))' } : undefined}
     >
       {animated && (
         <>
@@ -479,8 +478,8 @@ export function MuscleAnatomyBadge({ muscleText = '', size = 56 }) {
   const glutes = m.includes('fessier') || m.includes('lombaire') || m.includes('postérieure');
   const legs = m.includes('quadri') || m.includes('ischio') || m.includes('jambe') || m.includes('mollet') || m.includes('adduct') || m.includes('full');
 
-  const hot = '#c8ff00';
-  const idle = 'rgba(148, 163, 184, 0.22)';
+  const hot = 'var(--accent)';
+  const idle = 'var(--border-strong)';
 
   return (
     <svg
@@ -491,7 +490,7 @@ export function MuscleAnatomyBadge({ muscleText = '', size = 56 }) {
       aria-label={`Anatomie : ${muscleText}`}
     >
       {/* Tête */}
-      <circle cx="32" cy="10" r="6" fill="rgba(148, 163, 184, 0.35)" />
+      <circle cx="32" cy="10" r="6" fill="var(--text-muted)" fillOpacity="0.45" />
       {/* Épaules / Deltoïdes */}
       <circle cx="19" cy="22" r="4.5" fill={shoulders ? hot : idle} />
       <circle cx="45" cy="22" r="4.5" fill={shoulders ? hot : idle} />
@@ -542,10 +541,11 @@ export default function ExerciseMotionVisual({
   const rig = ARCHETYPE_RIGS[archetypeKey] || ARCHETYPE_RIGS.squat;
   const dur = rig.dur;
 
-  const accent = '#c8ff00';
-  const bodyNeutral = '#cbd5e1';
-  const bodyDark = '#64748b';
-  const rigMetal = '#334155';
+  const accent = 'var(--accent)';
+  const bodyPrimary = 'var(--text-primary)';
+  const bodyNeutral = 'var(--text-secondary)';
+  const bodyDark = 'var(--text-muted)';
+  const rigMetal = 'var(--border-strong)';
 
   const isThumb = size === 'thumb';
 
@@ -565,20 +565,20 @@ export default function ExerciseMotionVisual({
     <div
       className={`relative overflow-hidden select-none ${
         isThumb
-          ? 'w-14 h-14 rounded-2xl bg-[#0b0d13] border border-white/10 flex items-center justify-center shrink-0'
+          ? 'w-12 h-12 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0'
           : size === 'card'
-          ? 'w-full h-36 rounded-2xl bg-[#0b0d13] border border-white/10'
-          : 'w-full h-48 sm:h-52 rounded-3xl bg-[#0b0d13] border border-white/10'
+          ? 'w-full h-36 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)]'
+          : 'w-full h-48 sm:h-52 rounded-2xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)]'
       }`}
     >
-      {/* Grille de studio biomécanique subtile */}
+      {/* Grille architecturale discrète */}
       {!isThumb && (
         <div
-          className="absolute inset-0 opacity-25 pointer-events-none"
+          className="absolute inset-0 opacity-35 pointer-events-none"
           style={{
             backgroundImage:
-              'radial-gradient(circle at 50% 35%, rgba(200,255,0,0.14), transparent 65%), linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)',
-            backgroundSize: '100% 100%, 24px 24px, 24px 24px',
+              'linear-gradient(to right, var(--border-subtle) 1px, transparent 1px), linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
           }}
         />
       )}
@@ -589,7 +589,7 @@ export default function ExerciseMotionVisual({
         aria-label={exercise?.name || rig.label}
       >
         {/* Sol du studio */}
-        <line x1="24" y1="150" x2="216" y2="150" stroke="rgba(255,255,255,0.14)" strokeWidth="2" />
+        <line x1="24" y1="150" x2="216" y2="150" stroke="var(--border-strong)" strokeWidth="1.5" />
 
         {/* ÉQUIPEMENTS DE SALLE RÉALISTES */}
         {rig.equip === 'flat_bench_bar' && (
@@ -597,7 +597,7 @@ export default function ExerciseMotionVisual({
             <rect x="54" y="110" width="96" height="8" rx="4" fill={rigMetal} />
             <line x1="70" y1="118" x2="70" y2="150" stroke={rigMetal} strokeWidth="5" />
             <line x1="136" y1="118" x2="136" y2="150" stroke={rigMetal} strokeWidth="5" />
-            <line x1="82" y1="42" x2="82" y2="150" stroke="#475569" strokeWidth="4" />
+            <line x1="82" y1="42" x2="82" y2="150" stroke={bodyDark} strokeWidth="4" />
           </g>
         )}
 
@@ -616,7 +616,7 @@ export default function ExerciseMotionVisual({
 
         {rig.equip === 'dip_station' && (
           <g>
-            <line x1="76" y1="88" x2="156" y2="88" stroke="#64748b" strokeWidth="5" strokeLinecap="round" />
+            <line x1="76" y1="88" x2="156" y2="88" stroke={bodyDark} strokeWidth="5" strokeLinecap="round" />
             <line x1="84" y1="88" x2="84" y2="150" stroke={rigMetal} strokeWidth="5" />
             <line x1="148" y1="88" x2="148" y2="150" stroke={rigMetal} strokeWidth="5" />
           </g>
@@ -626,15 +626,15 @@ export default function ExerciseMotionVisual({
           <g>
             <line x1="68" y1="20" x2="68" y2="150" stroke={rigMetal} strokeWidth="5" />
             <line x1="172" y1="20" x2="172" y2="150" stroke={rigMetal} strokeWidth="5" />
-            <line x1="64" y1="22" x2="176" y2="22" stroke="#94a3b8" strokeWidth="5" strokeLinecap="round" />
+            <line x1="64" y1="22" x2="176" y2="22" stroke={bodyNeutral} strokeWidth="5" strokeLinecap="round" />
           </g>
         )}
 
         {rig.equip === 'roman_backrest' && (
           <g>
             <line x1="98" y1="24" x2="98" y2="150" stroke={rigMetal} strokeWidth="6" />
-            <rect x="94" y="44" width="10" height="48" rx="4" fill="#475569" />
-            <line x1="98" y1="72" x2="142" y2="72" stroke="#64748b" strokeWidth="5" strokeLinecap="round" />
+            <rect x="94" y="44" width="10" height="48" rx="4" fill={bodyDark} />
+            <line x1="98" y1="72" x2="142" y2="72" stroke={bodyDark} strokeWidth="5" strokeLinecap="round" />
           </g>
         )}
 
@@ -649,7 +649,7 @@ export default function ExerciseMotionVisual({
               p2={rig.wrist}
               dur={dur}
               width={2}
-              color="#94a3b8"
+              color={bodyDark}
               animated={animated}
             />
           </g>
@@ -677,7 +677,7 @@ export default function ExerciseMotionVisual({
               p2={rig.wrist}
               dur={dur}
               width={2.2}
-              color="#94a3b8"
+              color={bodyDark}
               animated={animated}
             />
           </g>
@@ -689,15 +689,15 @@ export default function ExerciseMotionVisual({
             <line x1="120" y1="54" x2="120" y2="98" stroke={bodyNeutral} strokeWidth="14" strokeLinecap="round" />
             <line x1="114" y1="98" x2="108" y2="148" stroke={bodyDark} strokeWidth="8" strokeLinecap="round" />
             <line x1="126" y1="98" x2="132" y2="148" stroke={bodyDark} strokeWidth="8" strokeLinecap="round" />
-            <circle cx="120" cy="34" r="10" fill="#f8fafc" />
+            <circle cx="120" cy="34" r="10" fill={bodyPrimary} />
 
-            <AnimLine p1={rig.shoulderL} p2={rig.elbowL} dur={dur} width={7} color={accent} glow animated={animated} />
+            <AnimLine p1={rig.shoulderL} p2={rig.elbowL} dur={dur} width={7} color={accent} animated={animated} />
             <AnimLine p1={rig.elbowL} p2={rig.wristL} dur={dur} width={6} color={accent} animated={animated} />
-            <AnimLine p1={rig.shoulderR} p2={rig.elbowR} dur={dur} width={7} color={accent} glow animated={animated} />
+            <AnimLine p1={rig.shoulderR} p2={rig.elbowR} dur={dur} width={7} color={accent} animated={animated} />
             <AnimLine p1={rig.elbowR} p2={rig.wristR} dur={dur} width={6} color={accent} animated={animated} />
 
-            <AnimCircle p={rig.wristL} r={5} dur={dur} fill="#f8fafc" animated={animated} />
-            <AnimCircle p={rig.wristR} r={5} dur={dur} fill="#f8fafc" animated={animated} />
+            <AnimCircle p={rig.wristL} r={5} dur={dur} fill={bodyPrimary} animated={animated} />
+            <AnimCircle p={rig.wristR} r={5} dur={dur} fill={bodyPrimary} animated={animated} />
           </g>
         ) : (
           /* MODÈLE BIOMÉCANIQUE ARTICULÉ PROFIL */
@@ -717,7 +717,6 @@ export default function ExerciseMotionVisual({
               dur={dur}
               width={10}
               color={legColor}
-              glow={legColor === accent}
               animated={animated}
             />
             <AnimLine
@@ -725,7 +724,7 @@ export default function ExerciseMotionVisual({
               p2={rig.ankle}
               dur={dur}
               width={8}
-              color={legColor === accent ? '#e2e8f0' : bodyDark}
+              color={legColor === accent ? bodyPrimary : bodyDark}
               animated={animated}
             />
 
@@ -736,12 +735,11 @@ export default function ExerciseMotionVisual({
               dur={dur}
               width={13}
               color={torsoColor}
-              glow={torsoColor === accent}
               animated={animated}
             />
 
             {/* Tête */}
-            <AnimCircle p={rig.head} r={9.5} dur={dur} fill="#f8fafc" animated={animated} />
+            <AnimCircle p={rig.head} r={9.5} dur={dur} fill={bodyPrimary} animated={animated} />
 
             {/* Bras & Avant-bras */}
             <AnimLine
@@ -750,7 +748,6 @@ export default function ExerciseMotionVisual({
               dur={dur}
               width={7.5}
               color={armColor}
-              glow={armColor === accent}
               animated={animated}
             />
             <AnimLine
@@ -758,14 +755,14 @@ export default function ExerciseMotionVisual({
               p2={rig.wrist}
               dur={dur}
               width={6.5}
-              color="#f8fafc"
+              color={bodyPrimary}
               animated={animated}
             />
 
             {/* Pivots articulaires */}
-            <AnimCircle p={rig.hip} r={4} dur={dur} fill="#0f172a" animated={animated} />
-            <AnimCircle p={rig.knee} r={3.5} dur={dur} fill="#0f172a" animated={animated} />
-            <AnimCircle p={rig.shoulder} r={4} dur={dur} fill="#0f172a" animated={animated} />
+            <AnimCircle p={rig.hip} r={3.5} dur={dur} fill="var(--bg-card)" animated={animated} />
+            <AnimCircle p={rig.knee} r={3} dur={dur} fill="var(--bg-card)" animated={animated} />
+            <AnimCircle p={rig.shoulder} r={3.5} dur={dur} fill="var(--bg-card)" animated={animated} />
 
             {/* Charges mobiles (Disques olympiques / Haltères / Ab Wheel) */}
             {(rig.equip === 'barbell_back' ||
@@ -776,9 +773,9 @@ export default function ExerciseMotionVisual({
                 p={rig.equip === 'barbell_back' ? rig.shoulder : rig.wrist}
                 r={11}
                 dur={dur}
-                fill="rgba(15, 23, 42, 0.88)"
+                fill="var(--bg-card)"
                 stroke={accent}
-                strokeWidth={3}
+                strokeWidth={2.5}
                 animated={animated}
               />
             )}
@@ -800,7 +797,7 @@ export default function ExerciseMotionVisual({
                 dur={dur}
                 fill="none"
                 stroke={accent}
-                strokeWidth={3}
+                strokeWidth={2.5}
                 animated={animated}
               />
             )}
@@ -808,27 +805,29 @@ export default function ExerciseMotionVisual({
         )}
       </svg>
 
-      {/* Overlay Pro : Anatomie musculaire + étiquette biomécanique (uniquement en vue Hero) */}
+      {/* Overlay discret : Anatomie musculaire + étiquette biomécanique (uniquement en vue Hero) */}
       {size === 'hero' && (
         <>
-          <div className="absolute top-3 left-3.5 flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-full bg-black/65 backdrop-blur-md border border-white/10 text-[10px] font-bold uppercase tracking-wider text-[#c8ff00]">
+          <div className="absolute top-3 left-3 flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-card)]/90 backdrop-blur-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)]">
               {rig.label}
             </span>
           </div>
 
           {showAnatomy && (
-            <div className="absolute right-3 bottom-2.5 px-2 py-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 flex items-center gap-1.5">
+            <div className="absolute right-3 bottom-2.5 px-2 py-1.5 rounded-xl bg-[var(--bg-card)]/90 backdrop-blur-md border border-[var(--border-subtle)] flex items-center gap-1.5">
               <MuscleAnatomyBadge muscleText={exercise?.muscle || ''} size={34} />
             </div>
           )}
 
           {/* Barre de cadence respiratoire & tempo */}
-          <div className="absolute bottom-3 left-3.5 flex items-center gap-2">
-            <div className="w-16 h-1 rounded-full bg-white/15 overflow-hidden">
-              <div className="h-full w-full bg-[#c8ff00] bio-tempo-bar" />
+          <div className="absolute bottom-3 left-3 flex items-center gap-2">
+            <div className="w-14 h-1 rounded-full bg-[var(--border-strong)] overflow-hidden">
+              <div className="h-full w-full bg-[var(--accent)] bio-tempo-bar" />
             </div>
-            <span className="text-[10px] font-mono text-slate-400">TEMPO 2-1-1</span>
+            <span className="text-[10.5px] tabular-nums text-[var(--text-muted)]">
+              Tempo 2-1-1
+            </span>
           </div>
         </>
       )}

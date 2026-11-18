@@ -99,22 +99,22 @@ export default function ProfileModal({
   const allergyTags = DIETARY_FILTERS.filter((f) => !f.isDietBase);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="w-full max-w-lg max-h-[90vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+      <div className="w-full max-w-lg max-h-[90vh] card-elevated rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-              {isFirstOnboarding ? 'Bienvenue sur PulseFit' : 'Profil & Objectifs'}
+              {isFirstOnboarding ? 'Bienvenue sur Pulse' : 'Profil & objectifs'}
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
-              Formule Mifflin-St Jeor (ISSN) · Compte chiffré AES-256
+              Formule Mifflin-St Jeor (ISSN) · Synchronisation chiffrée
             </p>
           </div>
           {!isFirstOnboarding && (
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+              className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -151,7 +151,7 @@ export default function ProfileModal({
               </div>
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">Sexe</label>
-                <div className="grid grid-cols-2 p-1 rounded-2xl bg-[var(--bg-subtle)]">
+                <div className="grid grid-cols-2 seg-control">
                   {[
                     { id: 'male', label: 'Homme' },
                     { id: 'female', label: 'Femme' },
@@ -160,10 +160,8 @@ export default function ProfileModal({
                       key={s.id}
                       type="button"
                       onClick={() => setForm({ ...form, sex: s.id })}
-                      className={`py-1.5 rounded-xl text-xs font-medium transition-all ${
-                        form.sex === s.id
-                          ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                          : 'text-[var(--text-secondary)]'
+                      className={`py-1.5 seg-item ${
+                        form.sex === s.id ? 'seg-item-active' : ''
                       }`}
                     >
                       {s.label}
@@ -333,7 +331,7 @@ export default function ProfileModal({
               </span>
             </div>
 
-            <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)]">
+            <div className="grid grid-cols-3 seg-control">
               {dietBases.map((d) => {
                 const active = (form.dietBase || 'omnivore') === d.id;
                 return (
@@ -341,11 +339,7 @@ export default function ProfileModal({
                     key={d.id}
                     type="button"
                     onClick={() => setForm({ ...form, dietBase: d.id })}
-                    className={`py-1.5 rounded-full text-xs font-medium transition-all ${
-                      active
-                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                        : 'text-[var(--text-secondary)]'
-                    }`}
+                    className={`py-1.5 seg-item ${active ? 'seg-item-active' : ''}`}
                   >
                     {d.label}
                   </button>
@@ -361,7 +355,7 @@ export default function ProfileModal({
                     key={tag.id}
                     type="button"
                     onClick={() => toggleRestriction(tag.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       checked
                         ? 'bg-emerald-400/15 text-emerald-400 border-emerald-400/40'
                         : 'bg-[var(--bg-subtle)]/60 text-[var(--text-secondary)] border-[var(--border-subtle)]'
@@ -374,7 +368,7 @@ export default function ProfileModal({
             </div>
           </section>
 
-          <button type="submit" className="btn-accent w-full py-3">
+          <button type="submit" className="btn-primary w-full py-3">
             <Check className="w-4 h-4" />
             Enregistrer mon profil
           </button>

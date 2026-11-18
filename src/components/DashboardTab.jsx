@@ -4,7 +4,7 @@ import {
   Plus,
   Minus,
   ChevronRight,
-  Sparkles,
+  MessageSquare,
   Check,
   Droplets,
   Scale,
@@ -14,27 +14,41 @@ import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
 import ExerciseMotionVisual from './ExerciseMotionVisual';
 
+function formatTodayHeaderDate(lang) {
+  try {
+    const locale = lang === 'en' ? 'en-US' : lang === 'es' ? 'es-ES' : 'fr-FR';
+    const raw = new Intl.DateTimeFormat(locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(new Date());
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  } catch {
+    return '';
+  }
+}
+
 function getDynamicCoachNote(lang, hour, todayMacros, targets, waterMl) {
   const protRem = Math.round(targets.protein - (todayMacros.protein || 0));
   const waterPct = Math.round((waterMl / Math.max(1, targets.waterMl)) * 100);
 
   if (lang === 'en') {
     return protRem > 25
-      ? `${protRem}g protein left today — ask the AI Coach for an exact meal.`
-      : `Hydration at ${waterPct}%. Tap to build a custom workout or meal with AI.`;
+      ? `${protRem}g protein remaining today — ask your Coach for a balanced meal.`
+      : `Hydration at ${waterPct}%. Ask your Coach to adapt today's session.`;
   }
   if (lang === 'es') {
     return protRem > 25
-      ? `Faltan ${protRem}g de proteína hoy — pide una cena exacta al Coach IA.`
-      : `Hidratación al ${waterPct}%. Toca para hablar con tu Coach IA.`;
+      ? `Faltan ${protRem}g de proteína hoy — pide una comida exacta al Coach.`
+      : `Hidratación al ${waterPct}%. Habla con tu Coach para ajustar tu sesión.`;
   }
   if (hour < 12 && (todayMacros.protein || 0) < 20) {
-    return 'Vise 30g de protéines ce matin pour déclencher la synthèse musculaire.';
+    return 'Vise ~30g de protéines ce matin pour optimiser la récupération musculaire.';
   }
   if (protRem > 25) {
-    return `Il te reste ${protRem}g de protéines : demande un repas sur-mesure au Coach IA.`;
+    return `Il reste ${protRem}g de protéines à couvrir — demande une idée de repas au Coach.`;
   }
-  return 'Objectifs maîtrisés. Touche ici pour générer ta prochaine séance par IA.';
+  return 'Objectifs bien engagés. Ouvre le Coach pour ajuster ta séance ou tes macros.';
 }
 
 export default function DashboardTab({
@@ -66,7 +80,7 @@ export default function DashboardTab({
   const remainingKcal = targets.kcal - consumedKcal;
   const kcalRatio = Math.min(1, Math.max(0, consumedKcal / Math.max(1, targets.kcal)));
 
-  const ringRadius = 56;
+  const ringRadius = 46;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const strokeDashoffset = ringCircumference - kcalRatio * ringCircumference;
 
@@ -145,7 +159,6 @@ export default function DashboardTab({
       current: Math.round(todayMacros?.protein || 0),
       target: targets.protein,
       barColor: 'bg-sky-400',
-      textColor: 'text-sky-400',
     },
     {
       key: 'carbs',
@@ -153,7 +166,6 @@ export default function DashboardTab({
       current: Math.round(todayMacros?.carbs || 0),
       target: targets.carbs,
       barColor: 'bg-amber-400',
-      textColor: 'text-amber-400',
     },
     {
       key: 'fat',
@@ -161,7 +173,6 @@ export default function DashboardTab({
       current: Math.round(todayMacros?.fat || 0),
       target: targets.fat,
       barColor: 'bg-rose-400',
-      textColor: 'text-rose-400',
     },
   ];
 
@@ -195,101 +206,111 @@ export default function DashboardTab({
     };
   }, [bodyMetrics]);
 
+  const todayHeaderDate = useMemo(() => formatTodayHeaderDate(lang), [lang]);
+
   return (
-    <div className="space-y-5 pb-10 animate-fade-in">
-      {/* En-tête Athlète aéré */}
-      <div className="flex items-center justify-between px-1 pt-1">
+    <div className="space-y-4 pb-8 animate-fade-in">
+      {/* En-tête éditorial sobre */}
+      <div className="flex items-end justify-between px-0.5 pt-0.5">
         <div>
-          <span className="section-eyebrow block">Synthèse Quotidienne</span>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] mt-0.5">
+          {todayHeaderDate && (
+            <span className="text-xs text-[var(--text-muted)] block">
+              {todayHeaderDate}
+            </span>
+          )}
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mt-0.5">
             {profile?.name || 'Athlète'}
           </h1>
         </div>
 
-        <div className="px-3.5 py-1.5 rounded-full bg-emerald-400/15 border border-emerald-400/35 text-xs font-bold text-emerald-400 font-mono">
-          SCORE {readinessScore}%
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+          <span>Forme {readinessScore}%</span>
         </div>
       </div>
 
-      {/* 1. COCKPIT ÉNERGÉTIQUE ÉPURÉ (Hiérarchie visuelle nette, zéro surcharge) */}
-      <section className="card-surface p-6 space-y-6">
-        <div className="flex items-center justify-between gap-5">
-          <div className="space-y-1.5">
-            <span className="section-eyebrow block">Budget Calorique</span>
-            <div className="text-4xl font-extrabold tracking-tight text-[var(--text-primary)] font-mono leading-none">
-              {Math.abs(remainingKcal)}
-            </div>
-            <p className="text-xs text-[var(--text-secondary)] font-medium">
-              {remainingKcal >= 0 ? tr(lang, 'kcal_remaining') : tr(lang, 'kcal_surplus')} ·{' '}
-              <span className="text-[var(--text-muted)]">
-                {consumedKcal}/{targets.kcal}
+      {/* 1. BILAN ÉNERGÉTIQUE & MACRONUTRIMENTS (Grille épurée sans boîtes imbriquées) */}
+      <section className="card-surface p-5 space-y-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="section-eyebrow block">
+              {remainingKcal >= 0 ? 'Énergie restante' : 'Surplus calorique'}
+            </span>
+            <div className="flex items-baseline gap-1.5 tabular-nums">
+              <span className="text-[32px] font-semibold tracking-tight text-[var(--text-primary)] leading-none">
+                {Math.abs(remainingKcal)}
               </span>
+              <span className="text-xs text-[var(--text-muted)]">kcal</span>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] tabular-nums pt-0.5">
+              {consumedKcal} consommées sur {targets.kcal} kcal
             </p>
 
-            <button
-              type="button"
-              onClick={() => onNavigateTab('nutrition')}
-              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] hover:border-emerald-400/40 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5 text-emerald-400" />
-              Journaliser un repas
-            </button>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => onNavigateTab('nutrition')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                Ajouter un repas
+              </button>
+            </div>
           </div>
 
-          <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
-            <svg className="w-32 h-32 -rotate-90" viewBox="0 0 132 132">
+          <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+            <svg className="w-28 h-28 -rotate-90" viewBox="0 0 112 112">
               <circle
-                cx="66"
-                cy="66"
+                cx="56"
+                cy="56"
                 r={ringRadius}
                 fill="none"
-                stroke="currentColor"
-                className="text-slate-500/15"
-                strokeWidth="10"
+                stroke="var(--border-strong)"
+                strokeWidth="6.5"
               />
               <circle
-                cx="66"
-                cy="66"
+                cx="56"
+                cy="56"
                 r={ringRadius}
                 fill="none"
-                stroke={remainingKcal < -120 ? '#fbbf24' : 'var(--accent)'}
-                strokeWidth="10"
+                stroke={remainingKcal < -120 ? 'var(--macro-c)' : 'var(--accent)'}
+                strokeWidth="6.5"
                 strokeLinecap="round"
                 strokeDasharray={ringCircumference}
                 strokeDashoffset={strokeDashoffset}
                 className="transition-all duration-700 ease-out"
               />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-base font-extrabold text-[var(--text-primary)] font-mono">
+            <div className="absolute inset-0 flex flex-col items-center justify-center tabular-nums">
+              <span className="text-sm font-semibold text-[var(--text-primary)]">
                 {Math.round(kcalRatio * 100)}%
               </span>
-              <span className="text-[9.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold">
-                Cible
-              </span>
+              <span className="text-[10px] text-[var(--text-muted)]">objectif</span>
             </div>
           </div>
         </div>
 
-        {/* 3 Colonnes Macronutriments spacieuses */}
-        <div className="grid grid-cols-3 gap-2.5 pt-4 border-t border-[var(--border-subtle)]">
-          {macros.map((m) => {
+        {/* 3 colonnes séparées par un filet fin */}
+        <div className="grid grid-cols-3 divide-x divide-[var(--border-subtle)] pt-4 border-t border-[var(--border-subtle)]">
+          {macros.map((m, idx) => {
             const pct = Math.min(100, Math.round((m.current / Math.max(1, m.target)) * 100));
             return (
               <div
                 key={m.key}
-                className="rounded-2xl bg-[var(--bg-subtle)]/55 p-3 space-y-2"
+                className={`space-y-1.5 ${
+                  idx === 0 ? 'pr-3' : idx === 1 ? 'px-3' : 'pl-3'
+                }`}
               >
-                <span className="text-[11px] font-semibold text-[var(--text-secondary)] block truncate">
+                <span className="text-xs text-[var(--text-muted)] block truncate">
                   {m.label}
                 </span>
-                <div className="font-mono text-sm font-extrabold text-[var(--text-primary)]">
+                <div className="tabular-nums text-sm font-semibold text-[var(--text-primary)]">
                   {m.current}
-                  <span className="text-[11px] font-normal text-[var(--text-muted)]">
+                  <span className="text-xs font-normal text-[var(--text-muted)]">
                     /{m.target}g
                   </span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-500/15 overflow-hidden">
+                <div className="h-1 w-full rounded-full bg-[var(--bg-subtle)] overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${m.barColor}`}
                     style={{ width: `${pct}%` }}
@@ -301,24 +322,24 @@ export default function DashboardTab({
         </div>
       </section>
 
-      {/* 2. SÉANCE VEDETTE AVEC APERÇU BIOMÉCANIQUE ANIMÉ */}
+      {/* 2. PROCHAINE SÉANCE */}
       <section className="card-surface p-5 space-y-4">
         {activeWorkoutSession ? (
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <span className="section-eyebrow !text-emerald-400 block">
+              <span className="text-xs font-medium text-emerald-400 block">
                 {tr(lang, 'session_paused')}
               </span>
-              <h2 className="text-lg font-extrabold text-[var(--text-primary)] truncate mt-1">
+              <h2 className="text-base font-semibold text-[var(--text-primary)] truncate mt-0.5">
                 {activeWorkoutSession.workoutTitle}
               </h2>
             </div>
             <button
               type="button"
               onClick={onResumeWorkout}
-              className="btn-accent shrink-0"
+              className="btn-primary shrink-0"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-3.5 h-3.5 fill-current" />
               {tr(lang, 'resume')}
             </button>
           </div>
@@ -329,25 +350,25 @@ export default function DashboardTab({
               <button
                 type="button"
                 onClick={() => onNavigateTab('workouts')}
-                className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5"
+                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5 transition-colors"
               >
-                Catalogue
+                Programmes
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3.5">
               <ExerciseMotionVisual
                 exercise={suggestedWorkout?.exercises?.[0]}
                 size="thumb"
                 animated
               />
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-extrabold text-[var(--text-primary)] leading-snug truncate">
+                <h2 className="text-[15px] font-semibold text-[var(--text-primary)] leading-snug truncate">
                   {suggestedWorkout.title}
                 </h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  {suggestedWorkout.durationMin} min · {suggestedWorkout.exercises.length} mouvements
+                <p className="text-xs text-[var(--text-muted)] mt-0.5 tabular-nums">
+                  {suggestedWorkout.durationMin} min · {suggestedWorkout.exercises.length} exercices
                 </p>
               </div>
             </div>
@@ -355,31 +376,31 @@ export default function DashboardTab({
             <button
               type="button"
               onClick={() => onStartWorkout(suggestedWorkout, 'normal')}
-              className="btn-accent w-full"
+              className="btn-primary w-full"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-3.5 h-3.5 fill-current" />
               {tr(lang, 'start_workout')}
             </button>
           </>
         )}
       </section>
 
-      {/* 3. BENTO TÉLÉMÉTRIE : HYDRATATION & POIDS CORPOREL */}
-      <section className="grid grid-cols-2 gap-3.5">
+      {/* 3. HYDRATATION & POIDS CORPOREL */}
+      <section className="grid grid-cols-2 gap-3">
         <div className="card-surface p-4 flex flex-col justify-between space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="section-eyebrow">Eau</span>
-            <Droplets className="w-4 h-4 text-sky-400" />
+            <span className="section-eyebrow">Hydratation</span>
+            <Droplets className="w-3.5 h-3.5 text-[var(--text-muted)]" />
           </div>
 
           <div>
-            <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
+            <div className="text-xl font-semibold text-[var(--text-primary)] tabular-nums">
               {(waterMl / 1000).toFixed(2)}
               <span className="text-xs font-normal text-[var(--text-muted)] ml-1">
-                /{(targets.waterMl / 1000).toFixed(1)}L
+                / {(targets.waterMl / 1000).toFixed(1)} L
               </span>
             </div>
-            <div className="h-1.5 w-full bg-slate-500/15 rounded-full overflow-hidden mt-2">
+            <div className="h-1 w-full bg-[var(--bg-subtle)] rounded-full overflow-hidden mt-2">
               <div
                 className="h-full bg-sky-400 rounded-full transition-all duration-500"
                 style={{ width: `${waterPct}%` }}
@@ -391,7 +412,7 @@ export default function DashboardTab({
             <button
               type="button"
               onClick={() => onUpdateWater(Math.max(0, waterMl - 250))}
-              className="w-8 h-8 rounded-xl bg-[var(--bg-subtle)] text-[var(--text-secondary)] flex items-center justify-center active:scale-95"
+              className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center active:scale-95 transition-colors"
               aria-label="-250 ml"
             >
               <Minus className="w-3.5 h-3.5" />
@@ -399,9 +420,9 @@ export default function DashboardTab({
             <button
               type="button"
               onClick={() => onUpdateWater(waterMl + 250)}
-              className="flex-1 h-8 rounded-xl bg-sky-400/15 text-xs font-bold text-sky-400 active:scale-95 font-mono"
+              className="flex-1 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] active:scale-95 tabular-nums transition-colors"
             >
-              +250ml
+              +250 ml
             </button>
           </div>
         </div>
@@ -409,19 +430,19 @@ export default function DashboardTab({
         <div className="card-surface p-4 flex flex-col justify-between space-y-3.5">
           <div className="flex items-center justify-between">
             <span className="section-eyebrow">{tr(lang, 'weight')}</span>
-            <Scale className="w-4 h-4 text-emerald-400" />
+            <Scale className="w-3.5 h-3.5 text-[var(--text-muted)]" />
           </div>
 
           {!weightEditOpen ? (
             <>
               <div>
-                <div className="flex items-baseline justify-between gap-1">
-                  <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
+                <div className="flex items-baseline justify-between gap-1 tabular-nums">
+                  <div className="text-xl font-semibold text-[var(--text-primary)]">
                     {profile?.weight || 74}
                     <span className="text-xs font-normal text-[var(--text-muted)] ml-1">kg</span>
                   </div>
                   {weightTrend && (
-                    <span className="text-[10.5px] font-mono font-bold text-emerald-400">
+                    <span className="text-[11px] font-medium text-emerald-400">
                       {weightTrend.deltaLabel}
                     </span>
                   )}
@@ -432,7 +453,7 @@ export default function DashboardTab({
                     <polyline
                       fill="none"
                       stroke="var(--accent)"
-                      strokeWidth="2.2"
+                      strokeWidth="1.75"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       points={weightTrend.svgPoints}
@@ -447,7 +468,7 @@ export default function DashboardTab({
                   setNewWeight(profile?.weight || 74);
                   setWeightEditOpen(true);
                 }}
-                className="w-full h-8 rounded-xl bg-[var(--bg-subtle)] text-xs font-semibold text-[var(--text-primary)]"
+                className="w-full h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] transition-colors"
               >
                 {tr(lang, 'update')}
               </button>
@@ -461,41 +482,41 @@ export default function DashboardTab({
                 max="250"
                 value={newWeight}
                 onChange={(e) => setNewWeight(e.target.value)}
-                className="input-dark !py-1.5 !px-2.5 text-xs font-mono"
+                className="input-dark !py-1.5 !px-2.5 text-xs tabular-nums"
               />
-              <button type="submit" className="btn-accent w-full !py-1.5 !text-xs">
-                Valider
+              <button type="submit" className="btn-primary w-full !py-1.5 !text-xs">
+                Enregistrer
               </button>
             </form>
           )}
         </div>
       </section>
 
-      {/* 4. ASSIDUITÉ 7 JOURS & ACCÈS RAPIDE COACH IA */}
+      {/* 4. RÉGULARITÉ 7 JOURS & NOTE DU COACH */}
       <section className="card-surface p-5 space-y-4">
         <div className="flex items-center justify-between">
           <span className="section-eyebrow">{tr(lang, 'last_7_days')}</span>
-          <span className="text-xs font-bold text-[var(--text-primary)] font-mono">
+          <span className="text-xs font-medium text-[var(--text-secondary)] tabular-nums">
             {workouts7dCount} {tr(lang, 'sessions_count')}
           </span>
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1.5">
           {last7Days.map((d) => (
             <div key={d.date} className="flex flex-col items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-[var(--text-muted)]">
+              <span className="text-[10px] font-medium text-[var(--text-muted)]">
                 {d.label}
               </span>
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs transition-all ${
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-colors ${
                   d.done
-                    ? 'bg-emerald-400 text-zinc-950 font-extrabold'
+                    ? 'bg-[var(--accent)] text-white'
                     : d.isToday
-                    ? 'border border-emerald-400/50 text-[var(--text-primary)]'
+                    ? 'border border-[var(--border-strong)] text-[var(--text-primary)]'
                     : 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'
                 }`}
               >
-                {d.done ? <Check className="w-4 h-4 stroke-[2.8]" /> : '·'}
+                {d.done ? <Check className="w-3.5 h-3.5 stroke-[2.5]" /> : '·'}
               </div>
             </div>
           ))}
@@ -507,8 +528,8 @@ export default function DashboardTab({
           className="w-full pt-3.5 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3 text-left group"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-emerald-400/15 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
+            <div className="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <MessageSquare className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
             </div>
             <p className="text-xs text-[var(--text-secondary)] leading-snug group-hover:text-[var(--text-primary)] transition-colors">
               {coachNote}

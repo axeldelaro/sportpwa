@@ -4,7 +4,6 @@ import {
   RotateCcw,
   BookOpen,
   ExternalLink,
-  Cpu,
   Play,
   Plus,
   Check,
@@ -20,11 +19,11 @@ import ExerciseMotionVisual from './ExerciseMotionVisual';
 function renderFormattedLine(line, lineIdx) {
   const parts = String(line).split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return (
-    <p key={lineIdx} className={line.trim() === '' ? 'h-2' : 'leading-relaxed'}>
+    <p key={lineIdx} className={line.trim() === '' ? 'h-1.5' : 'leading-relaxed'}>
       {parts.map((part, idx) => {
         if (part.startsWith('**') && part.endsWith('**')) {
           return (
-            <strong key={idx} className="font-bold text-[var(--text-primary)]">
+            <strong key={idx} className="font-semibold text-[var(--text-primary)]">
               {part.slice(2, -2)}
             </strong>
           );
@@ -153,18 +152,20 @@ export default function CoachChatTab({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-11rem)] max-h-[760px] animate-fade-in">
-      {/* En-tête Moteur IA Autonome */}
-      <div className="flex items-center justify-between gap-2 px-1 pb-3 shrink-0">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-400/15 border border-emerald-400/35 text-[11px] font-bold text-emerald-400 whitespace-nowrap">
-          <Cpu className="w-3.5 h-3.5 shrink-0" />
-          <span>
+    <div className="flex flex-col h-[calc(100dvh-10.5rem)] max-h-[760px] animate-fade-in">
+      {/* En-tête éditorial discret */}
+      <div className="flex items-center justify-between gap-2 px-0.5 pb-3 border-b border-[var(--border-subtle)] mb-3 shrink-0">
+        <div>
+          <h1 className="text-base font-semibold text-[var(--text-primary)] tracking-tight">
+            {lang === 'en' ? 'Coach' : lang === 'es' ? 'Entrenador' : 'Coach'}
+          </h1>
+          <p className="text-xs text-[var(--text-muted)]">
             {lang === 'en'
-              ? 'Autonomous Club AI · Zero Quota'
+              ? 'Offline engine · ISSN & ACSM references'
               : lang === 'es'
-                ? 'IA Autónoma Club · Sin Cuota'
-                : 'Coach IA Embarqué · Sans Quota'}
-          </span>
+                ? 'Motor sin conexión · Referencias ISSN y ACSM'
+                : 'Moteur autonome hors-ligne · Références ISSN & ACSM'}
+          </p>
         </div>
 
         {messages.length > 0 && (
@@ -176,20 +177,19 @@ export default function CoachChatTab({
                 setMemory(null);
               }
             }}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Réinitialiser</span>
+            <span>Effacer</span>
           </button>
         )}
       </div>
 
       {/* Fil de discussion */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-4 pr-1 pb-2">
-        <div className="max-w-[92%] rounded-3xl rounded-tl-md card-surface p-4 text-xs text-[var(--text-secondary)] leading-relaxed space-y-1.5">
-          <span className="section-eyebrow !text-emerald-400 block">PULSE Intelligence</span>
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-3.5 pr-1 pb-2">
+        <div className="max-w-[92%] rounded-2xl rounded-bl-sm card-surface p-4 text-[13px] text-[var(--text-secondary)] leading-relaxed">
           <p>
-            Bonjour <strong className="text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Demande-moi de <strong>composer une séance sur-mesure</strong>, de <strong>calculer les macros de plusieurs aliments</strong>, de créer un <strong>repas à un total précis de kcal</strong> ou d'afficher la <strong>biomécanique animée d'un exercice</strong>.
+            Bonjour <strong className="font-semibold text-[var(--text-primary)]">{profile?.name || 'Athlète'}</strong>. Tu peux me demander de <strong className="font-medium text-[var(--text-primary)]">composer une séance sur-mesure</strong>, de <strong className="font-medium text-[var(--text-primary)]">calculer les macros de plusieurs aliments</strong>, de proposer des <strong className="font-medium text-[var(--text-primary)]">recettes autour d'un ingrédient</strong> ou d'afficher l'exécution d'un mouvement.
           </p>
         </div>
 
@@ -200,13 +200,13 @@ export default function CoachChatTab({
           return (
             <div
               key={msg.id}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-2`}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1.5`}
             >
               <div
-                className={`max-w-[90%] p-4 text-xs space-y-2.5 ${
+                className={`max-w-[90%] text-[13px] leading-relaxed ${
                   isUser
-                    ? 'rounded-3xl rounded-tr-md bg-emerald-400 text-zinc-950 font-bold'
-                    : 'rounded-3xl rounded-tl-md card-surface text-[var(--text-secondary)]'
+                    ? 'rounded-2xl rounded-br-sm bg-[var(--text-primary)] text-[var(--bg-app)] px-4 py-2.5 font-normal'
+                    : 'rounded-2xl rounded-bl-sm card-surface p-4 text-[var(--text-secondary)] space-y-2.5'
                 }`}
               >
                 {isUser ? (
@@ -219,7 +219,6 @@ export default function CoachChatTab({
                         .map((line, idx) => renderFormattedLine(line, idx))}
                     </div>
 
-                    {/* Aperçu d'exécution animé intégré à la réponse IA */}
                     {msg.exerciseDemo && (
                       <div className="pt-1">
                         <ExerciseMotionVisual
@@ -231,19 +230,17 @@ export default function CoachChatTab({
                       </div>
                     )}
 
-                    {/* Bouton interactif 1-clic : Lancer la séance générée par l'IA */}
                     {msg.workoutAction && onStartWorkoutFromCoach && (
                       <button
                         type="button"
                         onClick={() => onStartWorkoutFromCoach(msg.workoutAction)}
-                        className="btn-accent w-full !py-2.5 !text-xs mt-1"
+                        className="btn-primary w-full !py-2 !text-xs mt-1"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
                         Lancer cette séance ({msg.workoutAction.exercises?.length || 0} ex.)
                       </button>
                     )}
 
-                    {/* Bouton interactif 1-clic : Ajouter le repas calculé au journal */}
                     {msg.mealAction && onLogMealFromCoach && (
                       <button
                         type="button"
@@ -252,16 +249,16 @@ export default function CoachChatTab({
                           onLogMealFromCoach(msg.mealAction);
                           setLoggedActionIds((prev) => ({ ...prev, [msg.id]: true }));
                         }}
-                        className={`w-full py-2.5 px-4 rounded-2xl font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-all mt-1 ${
+                        className={`w-full py-2 px-4 rounded-xl font-medium text-xs inline-flex items-center justify-center gap-1.5 transition-all mt-1 ${
                           alreadyLogged
-                            ? 'bg-[var(--bg-subtle)] text-emerald-400 border border-emerald-400/30'
-                            : 'btn-primary !py-2.5 !text-xs'
+                            ? 'bg-[var(--bg-subtle)] text-emerald-400 border border-[var(--border-subtle)]'
+                            : 'btn-primary !py-2 !text-xs'
                         }`}
                       >
                         {alreadyLogged ? (
                           <>
                             <Check className="w-3.5 h-3.5" />
-                            Ajouté à ton journal du jour
+                            Ajouté au journal du jour
                           </>
                         ) : (
                           <>
@@ -276,17 +273,17 @@ export default function CoachChatTab({
               </div>
 
               {!isUser && Array.isArray(msg.sources) && msg.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-w-[90%] pl-1">
+                <div className="flex flex-wrap gap-1.5 max-w-[90%] pl-0.5">
                   {msg.sources.map((src) => (
                     <a
                       key={src.id}
                       href={src.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[10.5px] text-[var(--text-muted)] hover:text-emerald-400 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                       title={src.localizedSummary}
                     >
-                      <BookOpen className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <BookOpen className="w-3 h-3 shrink-0" />
                       <span>{src.citation}</span>
                       <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                     </a>
@@ -298,14 +295,14 @@ export default function CoachChatTab({
         })}
 
         {isTyping && (
-          <div className="inline-flex items-center gap-1.5 rounded-3xl card-surface px-4 py-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
+          <div className="inline-flex items-center gap-1.5 rounded-2xl card-surface px-3.5 py-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] animate-bounce" />
             <span
-              className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce"
+              className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] animate-bounce"
               style={{ animationDelay: '120ms' }}
             />
             <span
-              className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce"
+              className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] animate-bounce"
               style={{ animationDelay: '240ms' }}
             />
           </div>
@@ -313,14 +310,14 @@ export default function CoachChatTab({
       </div>
 
       {/* Suggestions & Saisie */}
-      <div className="pt-2 space-y-2.5 shrink-0">
+      <div className="pt-2.5 space-y-2 shrink-0">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {dynamicSuggestions.map((sug) => (
             <button
               key={sug}
               type="button"
               onClick={() => sendQuestion(sug)}
-              className="px-3.5 py-1.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] whitespace-nowrap transition-colors"
+              className="chip !py-1.5 !px-3 !text-[11.5px]"
             >
               {sug}
             </button>
@@ -329,7 +326,7 @@ export default function CoachChatTab({
 
         <form
           onSubmit={handleSubmit}
-          className="flex items-center gap-2 card-surface !rounded-2xl pl-4 pr-2 py-2"
+          className="flex items-center gap-2 card-surface !rounded-xl pl-3.5 pr-1.5 py-1.5"
         >
           <input
             type="text"
@@ -341,10 +338,10 @@ export default function CoachChatTab({
           <button
             type="submit"
             disabled={!input.trim() || isTyping}
-            className="w-9 h-9 rounded-xl bg-emerald-400 disabled:opacity-30 text-zinc-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
+            className="w-8 h-8 rounded-lg bg-[var(--text-primary)] disabled:opacity-25 text-[var(--bg-app)] flex items-center justify-center shrink-0 transition-transform active:scale-95"
             aria-label="Envoyer"
           >
-            <ArrowUp className="w-4 h-4 stroke-[2.6]" />
+            <ArrowUp className="w-4 h-4 stroke-[2.2]" />
           </button>
         </form>
       </div>

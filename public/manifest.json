@@ -1,13 +1,13 @@
 {
-  "name": "PULSE — Athletic & Nutrition Club",
-  "short_name": "PULSE Club",
-  "description": "Coaching sportif biomécanique, nutrition de précision & IA embarquée sans quota.",
+  "name": "Pulse — Entraînement & Nutrition",
+  "short_name": "Pulse",
+  "description": "Suivi d'entraînement biomécanique, journal nutritionnel précis et coaching autonome.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#07080b",
-  "theme_color": "#07080b",
+  "background_color": "#111214",
+  "theme_color": "#111214",
   "lang": "fr-FR",
   "categories": ["fitness", "health", "food"],
   "icons": [

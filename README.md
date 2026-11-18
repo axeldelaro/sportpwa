@@ -1,17 +1,17 @@
-# PULSE — Athletic & Nutrition Club (PWA Édition Salles de Sport & Coaching Pro)
+# Pulse — Entraînement & Nutrition (PWA Offline-First)
 
-**PULSE Athletic Club** est une Progressive Web App (PWA) mobile-first de calibre club sportif professionnel : design **Obsidian & Volt**, **représentations biomécaniques animées 60 FPS**, **302 aliments certifiés hors-ligne (+ 3 millions+ en direct)**, **144 exercices catégorisés**, **Coach IA compositionnel embarqué sans quota** et **synchronisation Cloud chiffrée multi-appareils**.
+**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **302 aliments certifiés hors-ligne (+ 3 millions+ en direct)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
 
 - **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa
 
 ---
 
-## Points Forts (V6.5 — Athletic Club Edition)
+## Points Forts (V7 — Édition Éditoriale)
 
-1. **Design System « Athletic Club » Mobile-First (Zéro Surcharge) :**
-   - Typographie géométrique **Plus Jakarta Sans** & métriques **JetBrains Mono**, dock de navigation flottant en verre dépoli, hiérarchie éditoriale aérée et 3 ambiances studio (**Volt Club**, **Carbone OLED**, **Ivoire**).
-   - Divulgation progressive (accordéons repas épurés, fiches biomécaniques dédiées, sparkline de tendance pondérale SVG, contrôles adaptés à l'usage en salle à une main).
+1. **Direction Artistique Sobre & Humaine (Sombre, Noir OLED, Clair) :**
+   - Typographie **Inter** à chiffres tabulaires (`tabular-nums`), surfaces mattes finement étagées sans néon ni surcharge visuelle, contrôles segmentés tactiles, contrastes d'encre nets et accent **Sauge minérale** mesuré.
+   - Illustrations biomécaniques et anatomiques adaptatives aux thèmes sombre et clair.
 
 2. **Recettes Dynamiques en Temps Réel & 4 Suggestions Variées par Aliment :**
    - **Réactualisation intégrale des recettes** (`resolveDynamicRecipe`) : remplacer un ingrédient dans le catalogue `Recettes`, dans le journal quotidien ou via la liste `Exclus` met à jour instantanément le **titre**, les **étapes de préparation**, les **ingrédients** et les **macros** (avec mémorisation dans le profil synchronisé et option *« Rétablir l'originale »*).

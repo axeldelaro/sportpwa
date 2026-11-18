@@ -257,8 +257,8 @@ export default function WorkoutsTab({
         </div>
       )}
 
-      {/* Navigation segmentée épurée à 4 vues */}
-      <div className="grid grid-cols-4 p-1 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+      {/* Navigation segmentée tactile à 4 vues */}
+      <div className="grid grid-cols-4 seg-control">
         {[
           { id: 'programs', label: tr(lang, 'tab_programs') },
           { id: 'exercises', label: 'Exercices' },
@@ -274,10 +274,8 @@ export default function WorkoutsTab({
               key={tab.id}
               type="button"
               onClick={() => setSubView(tab.id)}
-              className={`py-2 px-1.5 rounded-full text-[11.5px] font-medium transition-all truncate ${
-                active
-                  ? 'bg-emerald-400 text-zinc-950 font-semibold shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              className={`py-2 px-1.5 truncate seg-item ${
+                active ? 'seg-item-active' : ''
               }`}
             >
               {tab.label}
@@ -286,7 +284,7 @@ export default function WorkoutsTab({
         })}
       </div>
 
-      {/* Barre compacte : Disciplines (Callisthénie, Poids du corps, Élastiques...) + Bouton Matériel */}
+      {/* Barre compacte : Disciplines + Bouton Matériel */}
       {(subView === 'programs' || subView === 'exercises') && (
         <div className="space-y-2.5">
           <div className="flex items-center gap-1.5">
@@ -298,11 +296,7 @@ export default function WorkoutsTab({
                     key={cat.id}
                     type="button"
                     onClick={() => setDisciplineFilter(cat.id)}
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
-                      active
-                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                        : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
-                    }`}
+                    className={active ? 'chip-active' : 'chip'}
                   >
                     {cat.label}
                   </button>
@@ -313,10 +307,10 @@ export default function WorkoutsTab({
             <button
               type="button"
               onClick={() => setEquipmentDrawerOpen(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border shrink-0 transition-colors ${
                 selectedEquipment.length > 0
-                  ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400 font-semibold'
-                  : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-primary)]'
+                  ? 'bg-emerald-400/15 border-emerald-400/40 text-emerald-400'
+                  : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--border-strong)]'
               }`}
               title="Filtrer selon ton matériel disponible"
             >
@@ -328,14 +322,14 @@ export default function WorkoutsTab({
           </div>
 
           {/* Sélecteur discret d'intensité / énergie du jour */}
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] text-[var(--text-muted)]">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-xs text-[var(--text-muted)] tabular-nums">
               {subView === 'programs'
-                ? `${filteredPrograms.length} programme(s)`
-                : `${filteredExercises.length} exercice(s)`}
+                ? `${filteredPrograms.length} programmes`
+                : `${filteredExercises.length} exercices`}
             </span>
 
-            <div className="inline-flex items-center gap-0.5 bg-[var(--bg-subtle)] p-0.5 rounded-full border border-[var(--border-subtle)]">
+            <div className="inline-flex items-center gap-0.5 seg-control">
               {INTENSITY_MODES.map((m) => {
                 const selected = intensityMode === m.id;
                 return (
@@ -343,10 +337,8 @@ export default function WorkoutsTab({
                     key={m.id}
                     type="button"
                     onClick={() => setIntensityMode(m.id)}
-                    className={`px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
-                      selected
-                        ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                        : 'text-[var(--text-secondary)]'
+                    className={`px-2.5 py-1 !text-[11px] seg-item ${
+                      selected ? 'seg-item-active' : ''
                     }`}
                     title={m.description}
                   >
@@ -548,11 +540,7 @@ export default function WorkoutsTab({
                   key={m.id}
                   type="button"
                   onClick={() => setMuscleFilter(m.id)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
-                    active
-                      ? 'bg-[var(--text-primary)] text-[var(--bg-app)] font-semibold'
-                      : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
-                  }`}
+                  className={active ? 'chip-active !py-1 !px-2.5 !text-[11px]' : 'chip !py-1 !px-2.5 !text-[11px]'}
                 >
                   {m.label}
                 </button>
@@ -598,14 +586,14 @@ export default function WorkoutsTab({
                     <ExerciseMotionVisual exercise={ex} size="thumb" animated />
 
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-bold text-[var(--text-primary)] leading-snug line-clamp-1">
+                      <h4 className="text-sm font-semibold text-[var(--text-primary)] leading-snug line-clamp-1">
                         {ex.name}
                       </h4>
                       <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
                         {ex.muscle}
                         {eqLabels ? ` · ${eqLabels}` : ''}
                       </p>
-                      <span className="inline-block text-[11px] font-mono font-semibold text-emerald-400 mt-1">
+                      <span className="inline-block text-[11px] tabular-nums font-medium text-[var(--text-muted)] mt-0.5">
                         {ex.sets} × {ex.type === 'timed' ? `${ex.durationSeconds}s` : `${ex.targetReps} reps`}
                       </span>
                     </div>
@@ -616,14 +604,14 @@ export default function WorkoutsTab({
                         e.stopPropagation();
                         toggleQuickPickExercise(ex.id);
                       }}
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
                         picked
-                          ? 'bg-emerald-400 text-zinc-950 font-bold'
-                          : 'bg-[var(--bg-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                          ? 'bg-[var(--accent)] text-white'
+                          : 'bg-[var(--bg-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                       }`}
                       aria-label="Sélectionner l'exercice"
                     >
-                      {picked ? <Check className="w-4 h-4 stroke-[2.6]" /> : <Plus className="w-4 h-4" />}
+                      {picked ? <Check className="w-4 h-4 stroke-[2.4]" /> : <Plus className="w-4 h-4" />}
                     </button>
                   </div>
                 );
@@ -633,13 +621,13 @@ export default function WorkoutsTab({
 
           {/* Barre flottante ergonomique dès qu'on coche des exercices */}
           {quickPickIds.length > 0 && (
-            <div className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-30 card-elevated p-2.5 pl-4 flex items-center justify-between gap-2 border-emerald-400/40 animate-slide-up">
+            <div className="fixed bottom-[4.25rem] left-4 right-4 max-w-md mx-auto z-30 card-elevated p-2.5 pl-3.5 flex items-center justify-between gap-2 animate-slide-up">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="w-6 h-6 rounded-full bg-emerald-400 text-zinc-950 text-xs font-bold flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded-lg bg-[var(--accent)] text-white text-xs font-semibold flex items-center justify-center shrink-0 tabular-nums">
                   {quickPickIds.length}
                 </span>
-                <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                  exercice(s) prêt(s)
+                <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                  sélectionné{quickPickIds.length > 1 ? 's' : ''}
                 </span>
               </div>
 
@@ -1020,21 +1008,21 @@ export default function WorkoutsTab({
       {/* TIROIR MATÉRIEL DISPONIBLE (14 ÉQUIPEMENTS MÉMORISÉS SUR LE PROFIL) */}
       {/* =================================================================== */}
       {equipmentDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md max-h-[86vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-md max-h-[86vh] card-elevated rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                  Mon matériel disponible
+                  Matériel disponible
                 </h3>
-                <p className="text-[11px] text-[var(--text-muted)]">
+                <p className="text-xs text-[var(--text-muted)]">
                   Mémorisé sur ton profil · Filtre programmes & exercices
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setEquipmentDrawerOpen(false)}
-                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+                className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1046,20 +1034,16 @@ export default function WorkoutsTab({
                 <button
                   type="button"
                   onClick={() => applyEquipmentPreset([])}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border ${
-                    selectedEquipment.length === 0
-                      ? 'bg-emerald-400 text-zinc-950 border-emerald-400 font-semibold'
-                      : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
-                  }`}
+                  className={selectedEquipment.length === 0 ? 'chip-active' : 'chip'}
                 >
                   Tout afficher
                 </button>
                 <button
                   type="button"
                   onClick={() => applyEquipmentPreset(['none'])}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                  className="chip"
                 >
-                  100% Sans matériel
+                  Sans matériel
                 </button>
                 <button
                   type="button"
@@ -1073,9 +1057,9 @@ export default function WorkoutsTab({
                       'trx_rings',
                     ])
                   }
-                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                  className="chip"
                 >
-                  Parc / Street / Élastiques
+                  Parc / Élastiques
                 </button>
                 <button
                   type="button"
@@ -1088,9 +1072,9 @@ export default function WorkoutsTab({
                       'bench',
                     ])
                   }
-                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                  className="chip"
                 >
-                  Home Gym
+                  Maison
                 </button>
               </div>
 
@@ -1103,14 +1087,14 @@ export default function WorkoutsTab({
                       key={eq.id}
                       type="button"
                       onClick={() => toggleEquipmentId(eq.id)}
-                      className={`p-3 rounded-2xl border text-left text-xs font-medium flex items-center justify-between gap-2 transition-all ${
+                      className={`p-3 rounded-xl border text-left text-xs font-medium flex items-center justify-between gap-2 transition-all ${
                         checked
-                          ? 'bg-emerald-400/15 border-emerald-400/50 text-emerald-400 font-semibold'
-                          : 'bg-[var(--bg-subtle)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                          ? 'bg-emerald-400/15 border-emerald-400/40 text-[var(--text-primary)]'
+                          : 'bg-[var(--bg-subtle)]/50 border-[var(--border-subtle)] text-[var(--text-secondary)]'
                       }`}
                     >
                       <span className="leading-snug">{eq.label}</span>
-                      {checked && <Check className="w-3.5 h-3.5 shrink-0" />}
+                      {checked && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                     </button>
                   );
                 })}
@@ -1119,9 +1103,9 @@ export default function WorkoutsTab({
               <button
                 type="button"
                 onClick={() => setEquipmentDrawerOpen(false)}
-                className="btn-accent w-full !py-2.5 !text-xs"
+                className="btn-primary w-full"
               >
-                Voir les séances adaptées
+                Appliquer
               </button>
             </div>
           </div>

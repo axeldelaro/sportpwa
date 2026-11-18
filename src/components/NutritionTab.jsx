@@ -493,7 +493,7 @@ export default function NutritionTab({
   return (
     <div className="space-y-4 pb-8 animate-fade-in">
       {toastMsg && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-emerald-400 text-zinc-950 text-xs font-semibold shadow-xl flex items-center gap-1.5 animate-slide-up">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[var(--text-primary)] text-[var(--bg-app)] text-xs font-medium shadow-lg flex items-center gap-1.5 animate-slide-up">
           <Check className="w-3.5 h-3.5" />
           {toastMsg}
         </div>
@@ -501,17 +501,17 @@ export default function NutritionTab({
 
       {/* 1. NAVIGATION DATE + ACCÈS RAPIDE EXCLUSIONS ALIMENTAIRES */}
       <div className="flex items-center justify-between gap-2 px-0.5">
-        <div className="inline-flex items-center gap-0.5 bg-[var(--bg-subtle)] p-1 rounded-full border border-[var(--border-subtle)]">
+        <div className="inline-flex items-center gap-0.5 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border-subtle)]">
           <button
             type="button"
             onClick={() => onChangeDate(shiftDateString(selectedDate, -1))}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)]"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
             aria-label="Précédent"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <label className="relative px-2.5 py-1 cursor-pointer text-xs font-semibold text-[var(--text-primary)]">
+          <label className="relative px-2.5 py-1 cursor-pointer text-xs font-medium text-[var(--text-primary)]">
             {formatHumanDate(selectedDate, lang)}
             <input
               type="date"
@@ -524,7 +524,7 @@ export default function NutritionTab({
           <button
             type="button"
             onClick={() => onChangeDate(shiftDateString(selectedDate, 1))}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)]"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors"
             aria-label="Suivant"
           >
             <ChevronRight className="w-4 h-4" />
@@ -535,10 +535,10 @@ export default function NutritionTab({
           <button
             type="button"
             onClick={() => setExclusionsModalOpen(true)}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-xs font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
               dislikedIds.length > 0
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="Gérer les ingrédients que tu ne manges pas"
           >
@@ -550,10 +550,10 @@ export default function NutritionTab({
             type="button"
             onClick={handleSendFullDayToShopping}
             disabled={dayTotals.kcal === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--bg-subtle)] disabled:opacity-35 border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] disabled:opacity-35 border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] transition-colors"
             title={tr(lang, 'to_shopping')}
           >
-            <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+            <ShoppingBag className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
             <span className="hidden xs:inline">{tr(lang, 'to_shopping')}</span>
           </button>
         </div>
@@ -658,9 +658,9 @@ export default function NutritionTab({
                       setDrawerMealSlot(slot.id);
                       setPortionMult(1);
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] transition-colors"
                   >
-                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                    <Plus className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
                     {tr(lang, 'add')}
                   </button>
                 </div>
@@ -851,8 +851,8 @@ export default function NutritionTab({
       {/* MODALE 1 : AJOUTER UN REPAS / ALIMENT UNIVERSEL / CRÉER RECETTE     */}
       {/* =================================================================== */}
       {drawerMealSlot && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-xl max-h-[90vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-xl max-h-[90vh] card-elevated rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                 {MEAL_SLOTS.find((s) => s.id === drawerMealSlot)?.label}
@@ -860,14 +860,14 @@ export default function NutritionTab({
               <button
                 type="button"
                 onClick={() => setDrawerMealSlot(null)}
-                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+                className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="px-4 py-2.5 border-b border-[var(--border-subtle)] shrink-0">
-              <div className="grid grid-cols-3 p-1 rounded-full bg-[var(--bg-subtle)]">
+              <div className="grid grid-cols-3 seg-control">
                 {[
                   { id: 'recipes', label: `Recettes (${allRecipes.length})` },
                   { id: 'foods', label: 'Ingrédients (3M+)' },
@@ -879,10 +879,8 @@ export default function NutritionTab({
                       key={t.id}
                       type="button"
                       onClick={() => setDrawerTab(t.id)}
-                      className={`py-1.5 px-2 rounded-full text-xs font-medium transition-all ${
-                        active
-                          ? 'bg-emerald-400 text-zinc-950 font-semibold'
-                          : 'text-[var(--text-secondary)]'
+                      className={`py-1.5 px-2 seg-item ${
+                        active ? 'seg-item-active' : ''
                       }`}
                     >
                       {t.label}
@@ -907,16 +905,14 @@ export default function NutritionTab({
                     />
                   </div>
 
-                  <div className="inline-flex items-center gap-0.5 bg-[var(--bg-subtle)] p-1 rounded-full shrink-0">
+                  <div className="inline-flex items-center gap-0.5 seg-control shrink-0">
                     {[0.5, 1, 1.5, 2].map((m) => (
                       <button
                         key={m}
                         type="button"
                         onClick={() => setPortionMult(m)}
-                        className={`px-2 py-1 rounded-full text-[11px] font-semibold tabular-nums ${
-                          portionMult === m
-                            ? 'bg-emerald-400 text-zinc-950'
-                            : 'text-[var(--text-secondary)]'
+                        className={`px-2 py-1 !text-[11px] tabular-nums seg-item ${
+                          portionMult === m ? 'seg-item-active' : ''
                         }`}
                       >
                         {m}x
