@@ -256,71 +256,79 @@ function buildChefArchetypesForFood(targetFood, profile) {
         }
       );
     } else {
+      const isRichItem = (targetFood.per100g?.fat || 0) >= 9;
       generated.push({
         slot: 'breakfast',
-        title: `Assiette Salée Matinale : ${shortName} & Tartine Complète`,
+        title: `Brunch Salé : ${shortName} & ${cleanShortFoodLabel(oatOrBread.name)}`,
         prepMinutes: 8,
-        goalTag: 'Matin Salé IG Bas',
+        goalTag: 'Matin Salé',
         ingredients: [
-          { foodId: targetFood.id, grams: roundToNearest5g(gBase * 0.8) },
-          { foodId: 'pain_complet', grams: 65 },
-          { foodId: oliveOil.id, grams: 8 },
+          { foodId: targetFood.id, grams: roundToNearest5g(gBase) },
+          { foodId: oatOrBread.id, grams: 60 },
+          ...(isRichItem ? [{ foodId: greenVeg.id, grams: 80 }] : [{ foodId: oliveOil.id, grams: 8 }]),
         ],
         steps: [
-          `Préparer ${shortName.toLowerCase()} à la poêle chaude ou sur assiette.`,
-          `Servir sur pain complet grillé avec un filet d'huile d'olive.`,
+          `Dorer ${shortName.toLowerCase()} à la poêle antiadhésive ou au four.`,
+          `Servir avec ${cleanShortFoodLabel(oatOrBread.name).toLowerCase()} toasté.`,
         ],
       });
     }
 
+    const isRichProt = (targetFood.per100g?.fat || 0) >= 9;
     generated.push(
       {
         slot: 'lunch',
-        title: `Bowl Athlétique ${shortName}, ${cleanShortFoodLabel(carbLunch.name)} & ${cleanShortFoodLabel(greenVeg.name)}`,
+        title: `Assiette Équilibrée ${shortName}, ${cleanShortFoodLabel(carbLunch.name)} & ${cleanShortFoodLabel(greenVeg.name)}`,
         prepMinutes: 14,
         goalTag: 'Déjeuner Complet',
         ingredients: [
           { foodId: targetFood.id, grams: roundToNearest5g(gBase) },
           { foodId: carbLunch.id, grams: 75 },
-          { foodId: greenVeg.id, grams: 180 },
-          { foodId: oliveOil.id, grams: 10 },
+          { foodId: greenVeg.id, grams: 190 },
+          ...(isRichProt ? [] : [{ foodId: oliveOil.id, grams: 10 }]),
         ],
         steps: [
-          `Cuire ${cleanShortFoodLabel(carbLunch.name).toLowerCase()} puis saisir ${shortName.toLowerCase()} à feu vif.`,
-          `Ajouter ${cleanShortFoodLabel(greenVeg.name).toLowerCase()} croquants et arroser d'huile d'olive.`,
+          `Cuire ${cleanShortFoodLabel(carbLunch.name).toLowerCase()} puis dorer ${shortName.toLowerCase()} sans excès de matière grasse.`,
+          `Accompagner d'une belle portion de ${cleanShortFoodLabel(greenVeg.name).toLowerCase()} croquants.`,
         ],
       },
       {
         slot: 'dinner',
-        title: `Poêlée du Soir : ${shortName}, ${cleanShortFoodLabel(carbDinner.name)} & Légumes Verts`,
+        title: `Dîner Léger : ${shortName}, ${cleanShortFoodLabel(greenVeg.name)} & ${cleanShortFoodLabel(carbDinner.name)}`,
         prepMinutes: 15,
-        goalTag: 'Dîner Récupération',
+        goalTag: 'Dîner Équilibré',
         ingredients: [
           { foodId: targetFood.id, grams: roundToNearest5g(gBase) },
-          { foodId: carbDinner.id, grams: 170 },
-          { foodId: greenVeg.id, grams: 200 },
-          { foodId: oliveOil.id, grams: 8 },
+          { foodId: greenVeg.id, grams: 220 },
+          { foodId: carbDinner.id, grams: isRichProt ? 120 : 165 },
+          ...(isRichProt ? [] : [{ foodId: oliveOil.id, grams: 8 }]),
         ],
         steps: [
-          `Rôtir ou cuire vapeur ${cleanShortFoodLabel(carbDinner.name).toLowerCase()} et ${cleanShortFoodLabel(greenVeg.name).toLowerCase()}.`,
-          `Dresser avec ${shortName.toLowerCase()} doré minute.`,
+          `Cuire vapeur ou rôtir ${cleanShortFoodLabel(greenVeg.name).toLowerCase()} et ${cleanShortFoodLabel(carbDinner.name).toLowerCase()}.`,
+          `Dresser avec ${shortName.toLowerCase()} doré au four ou à la poêle.`,
         ],
       }
     );
 
     if (!isSweetFriendly) {
+      const wrapOrBread = pickSafePartner(
+        ['tortilla_wrap_ble', 'galette_sarrasin_bretonne', 'pain_complet'],
+        'glucides_complexes',
+        profile,
+        targetFood.id
+      );
       generated.push({
         slot: 'snack',
-        title: `Wrap Express Protéiné au ${shortName}`,
-        prepMinutes: 5,
-        goalTag: 'Collation Salée',
+        title: `Wrap Croustillant au ${shortName} & Crudités`,
+        prepMinutes: 6,
+        goalTag: 'Repas Express',
         ingredients: [
-          { foodId: targetFood.id, grams: roundToNearest5g(gBase * 0.75) },
-          { foodId: 'tortilla_wrap_ble', grams: 62 },
-          { foodId: greenVeg.id, grams: 80 },
+          { foodId: targetFood.id, grams: roundToNearest5g(gBase) },
+          { foodId: wrapOrBread.id, grams: 65 },
+          { foodId: greenVeg.id, grams: 90 },
         ],
         steps: [
-          `Garnir la tortilla avec ${shortName.toLowerCase()} émincé et ${cleanShortFoodLabel(greenVeg.name).toLowerCase()}, puis rouler serré.`,
+          `Émincer ${shortName.toLowerCase()} chaud, garnir ${cleanShortFoodLabel(wrapOrBread.name).toLowerCase()} avec ${cleanShortFoodLabel(greenVeg.name).toLowerCase()} et rouler serré.`,
         ],
       });
     }

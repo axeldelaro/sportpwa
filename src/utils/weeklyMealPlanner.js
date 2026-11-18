@@ -16,6 +16,10 @@ import {
   resolveDynamicRecipe,
   getVariedRecipesForFood,
 } from './foodRecipeSuggester.js';
+import {
+  scoreFoodMatch,
+  synthesizeSmartFoodFromName,
+} from './universalFoodResolver.js';
 
 const BASE_STAPLE_CANDIDATE_IDS = [
   'poulet_blanc',
@@ -169,35 +173,30 @@ export function parsePantryTextToFoods(rawText = '', profile) {
       }
     }
 
-    // 2. Recherche pondérée sur le catalogue compatible
-    const singularNorm = norm.endsWith('s') && norm.length > 3 ? norm.slice(0, -1) : norm;
+    // 2. Recherche pondérée insensible aux pluriels sur tout le catalogue
     let bestFood = null;
     let bestScore = 0;
 
     for (const f of compatibleFoods) {
-      const fNorm = normalizeText(f.name);
-      const fShort = normalizeText(cleanFoodShort(f.name));
-      let sc = 0;
-      if (fNorm === norm || fShort === norm || fShort === singularNorm) sc = 120;
-      else if (fShort.startsWith(norm) || fShort.startsWith(singularNorm)) sc = 90;
-      else if (
-        fShort.split(' ').includes(norm) ||
-        fShort.split(' ').includes(singularNorm)
-      ) {
-        sc = 75;
-      } else if (fNorm.includes(norm) || fNorm.includes(singularNorm)) {
-        sc = 45;
-      }
-
+      const sc = scoreFoodMatch(f, rawPart);
       if (sc > bestScore) {
         bestScore = sc;
         bestFood = f;
       }
     }
 
-    if (bestFood && bestScore >= 45 && !seen.has(bestFood.id)) {
+    if (bestFood && bestScore >= 60 && !seen.has(bestFood.id)) {
       seen.add(bestFood.id);
       matched.push(bestFood);
+      continue;
+    }
+
+    // 3. Aliment non pré-enregistré (ex: "cordons bleus maison", "escalope savoyarde", "samoussas") :
+    // synthèse nutritionnelle instantanée pour qu'il soit TOUJOURS reconnu et intégré aux recettes !
+    const synthesized = synthesizeSmartFoodFromName(rawPart);
+    if (synthesized && !seen.has(synthesized.id)) {
+      seen.add(synthesized.id);
+      matched.push(synthesized);
     }
   }
 

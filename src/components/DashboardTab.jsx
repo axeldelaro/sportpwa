@@ -420,9 +420,16 @@ export default function DashboardTab({
             <button
               type="button"
               onClick={() => onUpdateWater(waterMl + 250)}
-              className="flex-1 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-medium text-[var(--text-primary)] active:scale-95 tabular-nums transition-colors"
+              className="flex-1 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[11px] font-medium text-[var(--text-primary)] active:scale-95 tabular-nums transition-colors"
             >
-              +250 ml
+              +250
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateWater(waterMl + 500)}
+              className="flex-1 h-8 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[11px] font-medium text-[var(--text-primary)] active:scale-95 tabular-nums transition-colors"
+            >
+              +500
             </button>
           </div>
         </div>

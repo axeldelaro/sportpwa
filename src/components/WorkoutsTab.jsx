@@ -9,6 +9,7 @@ import {
   Search,
   X,
   BookmarkPlus,
+  Share2,
 } from 'lucide-react';
 import {
   WORKOUT_PROGRAMS,
@@ -21,6 +22,7 @@ import {
 } from '../data/workoutsData';
 import { normalizeText } from '../utils/substitutionEngine';
 import { computeMuscleRecoveryAndVolume } from '../utils/trainingAnalytics';
+import { encodeShareUrl, triggerNativeOrClipboardShare } from '../utils/shareCodec';
 import { tr } from '../i18n/translations';
 import ExerciseMotionVisual from './ExerciseMotionVisual';
 import ExerciseDetailModal from './ExerciseDetailModal';
@@ -896,11 +898,29 @@ export default function WorkoutsTab({
                       {wk.exercises?.length || 0} exercices · {wk.durationMin} min
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const url = encodeShareUrl('workout', {
+                          title: wk.title,
+                          durationMin: wk.durationMin,
+                          targetMuscles: wk.targetMuscles,
+                          equipment: wk.equipment,
+                          exercises: wk.exercises,
+                        });
+                        const res = await triggerNativeOrClipboardShare(wk.title, url);
+                        if (res === 'copied') alert('Lien de partage copié dans le presse-papiers.');
+                      }}
+                      className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      title="Partager cette séance par lien"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => onDeleteCustomWorkout(wk.id)}
-                      className="p-2 rounded-full text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                      className="p-2 rounded-lg text-[var(--text-muted)] hover:text-rose-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

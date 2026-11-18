@@ -1,6 +1,6 @@
 # Pulse — Entraînement & Nutrition (PWA Offline-First)
 
-**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **302 aliments certifiés hors-ligne (+ 3 millions+ en direct)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
+**Pulse** est une Progressive Web App (PWA) mobile-first conçue avec une direction artistique éditoriale sobre et soignée : **3 ambiances calibrées (Sombre graphite, Noir OLED, Clair papier chaud)**, **démonstrations biomécaniques animées**, **350+ aliments hors-ligne (+ 3 millions+ Open Food Facts + synthèse universelle pour tout plat non enregistré)**, **144 exercices catégorisés**, **Coach autonome sans quota** et **synchronisation chiffrée multi-appareils**.
 
 - **Application en ligne (PWA) :** https://axeldelaro.github.io/sportpwa/
 - **Dépôt GitHub :** https://github.com/axeldelaro/sportpwa

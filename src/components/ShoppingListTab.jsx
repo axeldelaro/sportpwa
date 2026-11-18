@@ -18,6 +18,10 @@ import {
 } from '../data/foodDatabase';
 import { normalizeText } from '../utils/substitutionEngine';
 import { getVariedRecipesForFood } from '../utils/foodRecipeSuggester';
+import {
+  scoreFoodMatch,
+  synthesizeSmartFoodFromName,
+} from '../utils/universalFoodResolver';
 import { searchOpenFoodFacts } from '../utils/openFoodFactsService';
 import { tr } from '../i18n/translations';
 
@@ -64,10 +68,12 @@ export default function ShoppingListTab({
 
   const matchingLocalFoods = useMemo(() => {
     if (!query.trim()) return compatibleFoods.slice(0, 7);
-    const q = normalizeText(query);
     return compatibleFoods
-      .filter((f) => normalizeText(f.name).includes(q))
-      .slice(0, 6);
+      .map((f) => ({ f, score: scoreFoodMatch(f, query) }))
+      .filter((x) => x.score >= 30)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((x) => x.f);
   }, [compatibleFoods, query]);
 
   // Suggestions live Open Food Facts dans la barre des courses si peu de résultats locaux
@@ -140,7 +146,7 @@ export default function ShoppingListTab({
 
     if (
       matchingLocalFoods.length > 0 &&
-      normalizeText(matchingLocalFoods[0].name).includes(normalizeText(trimmed))
+      scoreFoodMatch(matchingLocalFoods[0], trimmed) >= 65
     ) {
       const food = matchingLocalFoods[0];
       const g = Math.max(5, Math.round(Number(gramsInput) || food.defaultGrams || 100));
@@ -155,9 +161,21 @@ export default function ShoppingListTab({
       setQuery('');
       showToast(`+${g}g ${food.name}`);
     } else {
-      onAddCustomTextItem(trimmed, AISLE_CATEGORIES[4]);
-      setQuery('');
-      showToast(`${trimmed}`);
+      const synthesized = synthesizeSmartFoodFromName(trimmed);
+      if (synthesized) {
+        if (onCacheExternalFood) await onCacheExternalFood(synthesized);
+        const g = Math.max(
+          5,
+          Math.round(Number(gramsInput) || synthesized.defaultGrams || 100)
+        );
+        onAddFoodItem(synthesized.id, g);
+        setQuery('');
+        showToast(`+${g}g ${synthesized.name}`);
+      } else {
+        onAddCustomTextItem(trimmed, AISLE_CATEGORIES[4]);
+        setQuery('');
+        showToast(`${trimmed}`);
+      }
     }
   };
 

@@ -58,6 +58,7 @@ import {
 import { getFoodById, registerExternalFoods } from './data/foodDatabase';
 import { buildActiveWorkoutExercises } from './data/workoutsData';
 import { warmUpCoachEngine } from './utils/localCoachEngine';
+import { decodeShareHash } from './utils/shareCodec';
 import {
   restoreUnlockedSession,
   clearUnlockedSession,
@@ -151,6 +152,30 @@ export default function App() {
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Détection automatique d'un lien de partage hors-ligne (#share=...) pour importer une séance ou recette
+  useEffect(() => {
+    const checkHashImport = async () => {
+      if (typeof window === 'undefined' || !window.location.hash.includes('#share=')) {
+        return;
+      }
+      const shared = decodeShareHash(window.location.hash);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      if (!shared) return;
+      if (shared.type === 'workout' && shared.data?.title) {
+        await saveCustomWorkout(shared.data);
+        setCustomWorkouts(await getCustomWorkouts());
+        setActiveTab('workouts');
+      } else if (shared.type === 'recipe' && shared.data?.title) {
+        await saveCustomRecipe(shared.data);
+        setCustomRecipes(await getCustomRecipes());
+        setActiveTab('nutrition');
+      }
+    };
+    checkHashImport();
+    window.addEventListener('hashchange', checkHashImport);
+    return () => window.removeEventListener('hashchange', checkHashImport);
   }, []);
 
   const reloadAllFromIndexedDB = useCallback(async () => {

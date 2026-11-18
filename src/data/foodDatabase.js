@@ -1,6 +1,7 @@
 // Base nutritionnelle 100% locale — +300 aliments complets (valeurs ANSES Ciqual / USDA pour 100g)
 import { EXTENDED_FOODS_CATALOG } from './extendedFoodsCatalog.js';
 import { CLUB_FOODS_EXPANSION } from './clubFoodsExpansion.js';
+import { EVERYDAY_FOODS_CATALOG } from './everydayFoodsCatalog.js';
 
 export const AISLE_CATEGORIES = [
   'Viandes, Poissons & Protéines végétales',
@@ -1611,6 +1612,7 @@ export const FOOD_DATABASE = [
   },
   ...EXTENDED_FOODS_CATALOG,
   ...CLUB_FOODS_EXPANSION,
+  ...EVERYDAY_FOODS_CATALOG,
 ];
 
 const FOOD_MAP = new Map(

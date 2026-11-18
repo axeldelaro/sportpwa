@@ -3,8 +3,31 @@
 
 import { AISLE_CATEGORIES } from '../data/foodDatabase.js';
 
-function inferSwapGroupAndAisle(kcal, protein, carbs, fat, rawCategories = '') {
-  const catLower = String(rawCategories).toLowerCase();
+function inferSwapGroupAndAisle(kcal, protein, carbs, fat, rawCategories = '', rawName = '') {
+  const catLower = `${rawCategories} ${rawName}`.toLowerCase();
+
+  // Plats protéiques panés / préparés (cordon bleu, nuggets, poisson pané, escalope, viande...)
+  if (
+    protein >= 10 &&
+    (catLower.includes('cordon') ||
+      catLower.includes('nugget') ||
+      catLower.includes('tender') ||
+      catLower.includes('meat') ||
+      catLower.includes('poultry') ||
+      catLower.includes('volaille') ||
+      catLower.includes('poulet') ||
+      catLower.includes('dinde') ||
+      catLower.includes('jambon') ||
+      catLower.includes('saucisse') ||
+      catLower.includes('fish') ||
+      catLower.includes('poisson'))
+  ) {
+    return {
+      swapGroup: fat <= 6.5 ? 'proteines_maigres' : 'proteines_lipides',
+      category: AISLE_CATEGORIES[0],
+      defaultGrams: 120,
+    };
+  }
 
   // Boissons & Laitages
   if (
@@ -160,7 +183,8 @@ function normalizeOffProduct(p) {
     protein,
     carbs,
     fat,
-    p.categories || ''
+    p.categories || '',
+    rawName
   );
 
   const code = p.code || `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -194,9 +218,10 @@ export async function searchOpenFoodFacts(query, lang = 'fr', signal = undefined
     return offQueryCache.get(cacheKey);
   }
 
+  const host = lang === 'fr' ? 'fr.openfoodfacts.org' : 'world.openfoodfacts.org';
   const fields =
     'code,product_name,product_name_fr,brands,nutriments,nutriscore_grade,allergens_tags,categories';
-  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
+  const url = `https://${host}/cgi/search.pl?search_terms=${encodeURIComponent(
     q
   )}&search_simple=1&action=process&json=1&page_size=14&fields=${fields}`;
 

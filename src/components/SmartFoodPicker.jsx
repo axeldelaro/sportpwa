@@ -22,6 +22,10 @@ import {
 import { normalizeText } from '../utils/substitutionEngine';
 import { getVariedRecipesForFood } from '../utils/foodRecipeSuggester';
 import {
+  scoreFoodMatch,
+  synthesizeSmartFoodFromName,
+} from '../utils/universalFoodResolver';
+import {
   searchOpenFoodFacts,
   fetchProductByBarcode,
 } from '../utils/openFoodFactsService';
@@ -64,6 +68,7 @@ export default function SmartFoodPicker({
   const [selectedFood, setSelectedFood] = useState(null);
   const [grams, setGrams] = useState(100);
   const [showRecipeIdeas, setShowRecipeIdeas] = useState(false);
+  const [editingCustomMacros, setEditingCustomMacros] = useState(false);
 
   // Recherche temps réel automatique Open Food Facts (3M+ produits) dès 2 lettres
   useEffect(() => {
@@ -113,27 +118,25 @@ export default function SmartFoodPicker({
       return byGroup.slice(0, 90);
     }
 
-    const q = normalizeText(query);
-    const tokens = q.split(' ').filter((t) => t.length >= 2);
-
     return byGroup
-      .map((f) => {
-        const normName = normalizeText(f.name);
-        let score = 0;
-        if (normName === q) score += 100;
-        else if (normName.startsWith(q)) score += 75;
-        else if (normName.includes(q)) score += 50;
-        tokens.forEach((t) => {
-          if (normName.includes(t)) score += 20;
-        });
-        return { f, score };
-      })
-      .filter((x) => x.score > 0)
+      .map((f) => ({ f, score: scoreFoodMatch(f, query) }))
+      .filter((x) => x.score >= 25)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.f);
   }, [profile, groupFilter, query]);
 
-  const activeFood = selectedFood || localFoods[0] || remoteFoods[0] || null;
+  // Synthèse automatique universelle si l'aliment tapé n'est pas encore dans le catalogue local
+  const autoSynthesizedFood = useMemo(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return null;
+    if (localFoods.length > 0 && scoreFoodMatch(localFoods[0], trimmed) >= 85) {
+      return null;
+    }
+    return synthesizeSmartFoodFromName(trimmed);
+  }, [query, localFoods]);
+
+  const activeFood =
+    selectedFood || localFoods[0] || remoteFoods[0] || autoSynthesizedFood || null;
 
   useEffect(() => {
     if (!selectedFood && localFoods[0]) {
@@ -249,7 +252,10 @@ export default function SmartFoodPicker({
 
   const handleConfirm = async () => {
     if (!activeFood) return;
-    if (activeFood.sourceRef === 'Open Food Facts' && onCacheExternalFood) {
+    if (
+      (activeFood.sourceRef === 'Open Food Facts' || activeFood.isAutoSynthesized) &&
+      onCacheExternalFood
+    ) {
       await onCacheExternalFood(activeFood);
     }
     const cleanGrams = Math.max(1, Math.round(Number(grams) || activeFood.defaultGrams || 100));
@@ -258,7 +264,10 @@ export default function SmartFoodPicker({
 
   const handlePickSuggestedRecipe = async (sugRec) => {
     if (!sugRec || !onSelectRecipeSuggestion) return;
-    if (activeFood?.sourceRef === 'Open Food Facts' && onCacheExternalFood) {
+    if (
+      (activeFood?.sourceRef === 'Open Food Facts' || activeFood?.isAutoSynthesized) &&
+      onCacheExternalFood
+    ) {
       await onCacheExternalFood(activeFood);
     }
     onSelectRecipeSuggestion(sugRec);
@@ -377,6 +386,33 @@ export default function SmartFoodPicker({
 
       {/* Liste d'aliments */}
       <div className={`${compact ? 'max-h-40' : 'max-h-48'} overflow-y-auto space-y-2 pr-1`}>
+        {autoSynthesizedFood && (
+          <div className="space-y-0.5">
+            <p className="section-eyebrow px-1 pb-0.5">
+              Création instantanée & idées recettes
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedFood(autoSynthesizedFood);
+                setGrams(autoSynthesizedFood.defaultGrams || 110);
+              }}
+              className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors ${
+                activeFood?.id === autoSynthesizedFood.id
+                  ? 'bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-[var(--text-primary)] font-medium'
+                  : 'border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/60'
+              }`}
+            >
+              <span className="truncate">
+                Utiliser « {autoSynthesizedFood.name} » (macros estimées)
+              </span>
+              <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0">
+                {autoSynthesizedFood.per100g.kcal} kcal/100g
+              </span>
+            </button>
+          </div>
+        )}
+
         {localFoods.length > 0 && (
           <div className="space-y-0.5">
             <p className="section-eyebrow px-1 pb-1">
@@ -484,6 +520,15 @@ export default function SmartFoodPicker({
                   {previewMacros.kcal} kcal
                 </strong>{' '}
                 · {previewMacros.protein}g P · {previewMacros.carbs}g G · {previewMacros.fat}g L
+                {activeFood.isAutoSynthesized && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingCustomMacros((v) => !v)}
+                    className="ml-2 underline text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  >
+                    {editingCustomMacros ? 'Fermer' : 'Ajuster /100g'}
+                  </button>
+                )}
               </p>
             </div>
 
@@ -499,6 +544,39 @@ export default function SmartFoodPicker({
               <span className="text-[11px] text-[var(--text-muted)] ml-1">g</span>
             </div>
           </div>
+
+          {editingCustomMacros && activeFood.isAutoSynthesized && (
+            <div className="grid grid-cols-4 gap-1.5 pt-1">
+              {[
+                { key: 'kcal', lbl: 'kcal/100g' },
+                { key: 'protein', lbl: 'Prot. (g)' },
+                { key: 'carbs', lbl: 'Gluc. (g)' },
+                { key: 'fat', lbl: 'Lip. (g)' },
+              ].map((mField) => (
+                <div key={mField.key}>
+                  <label className="block text-[10px] text-[var(--text-muted)] mb-0.5">
+                    {mField.lbl}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="900"
+                    step="0.5"
+                    value={activeFood.per100g[mField.key]}
+                    onChange={(e) => {
+                      const nextPer100 = {
+                        ...activeFood.per100g,
+                        [mField.key]: Math.max(0, Number(e.target.value) || 0),
+                      };
+                      const updated = synthesizeSmartFoodFromName(activeFood.name, nextPer100);
+                      setSelectedFood({ ...updated });
+                    }}
+                    className="input-dark !py-1 !px-2 text-xs tabular-nums !bg-[var(--bg-card)]"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-1">
             {QUICK_GRAM_PRESETS.map((preset) => (

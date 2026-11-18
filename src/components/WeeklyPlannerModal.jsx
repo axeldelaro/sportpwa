@@ -13,9 +13,14 @@ import {
   getAllFoods,
   getFoodById,
   isFoodCompatibleWithProfile,
+  registerExternalFoods,
 } from '../data/foodDatabase';
 import { MEAL_SLOTS } from '../data/recipesData';
-import { normalizeText } from '../utils/substitutionEngine';
+import {
+  scoreFoodMatch,
+  synthesizeSmartFoodFromName,
+} from '../utils/universalFoodResolver';
+import { searchOpenFoodFacts } from '../utils/openFoodFactsService';
 import {
   getQuickPantryStaples,
   parsePantryTextToFoods,
@@ -32,11 +37,13 @@ export default function WeeklyPlannerModal({
   lang = 'fr',
   profile,
   customRecipes = [],
+  onCacheExternalFood,
   onApplyPlanToJournalAndShopping,
   onSendMissingOnlyToShopping,
 }) {
   const [pantryIds, setPantryIds] = useState(['poulet_blanc', 'riz_basmati_cru', 'oeufs_entiers']);
   const [pantryInput, setPantryInput] = useState('');
+  const [remotePantryMatches, setRemotePantryMatches] = useState([]);
   const [daysCount, setDaysCount] = useState(7);
   const [mealsPerDay, setMealsPerDay] = useState(4);
   const [batchCooking, setBatchCooking] = useState(false);
@@ -85,19 +92,52 @@ export default function WeeklyPlannerModal({
     [profile]
   );
 
+  // Recherche Open Food Facts en direct pour les ingrédients de marque ou spécifiques
+  useEffect(() => {
+    const trimmed = pantryInput.trim();
+    if (!isOpen || trimmed.length < 3 || trimmed.includes(',')) {
+      setRemotePantryMatches([]);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchOpenFoodFacts(trimmed, lang, controller.signal);
+        const valid = (res || [])
+          .filter((f) => !pantryIds.includes(f.id) && isFoodCompatibleWithProfile(f, profile))
+          .slice(0, 4);
+        if (valid.length > 0) registerExternalFoods(valid);
+        setRemotePantryMatches(valid);
+      } catch {
+        // Hors-ligne
+      }
+    }, 380);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isOpen, pantryInput, lang, pantryIds, profile]);
+
   const searchMatches = useMemo(() => {
     const trimmed = pantryInput.trim();
     if (trimmed.length < 2 || trimmed.includes(',')) return [];
-    const q = normalizeText(trimmed);
-    return getAllFoods()
-      .filter(
-        (f) =>
-          !pantryIds.includes(f.id) &&
-          isFoodCompatibleWithProfile(f, profile) &&
-          normalizeText(f.name).includes(q)
-      )
-      .slice(0, 6);
-  }, [pantryInput, pantryIds, profile]);
+    const local = getAllFoods()
+      .filter((f) => !pantryIds.includes(f.id) && isFoodCompatibleWithProfile(f, profile, { ignoreDislikes: true }))
+      .map((f) => ({ f, score: scoreFoodMatch(f, trimmed) }))
+      .filter((x) => x.score >= 30)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((x) => x.f);
+
+    const combined = [...local, ...remotePantryMatches].slice(0, 6);
+    if (combined.length === 0 || scoreFoodMatch(combined[0], trimmed) < 75) {
+      const synth = synthesizeSmartFoodFromName(trimmed);
+      if (synth && !pantryIds.includes(synth.id)) {
+        return [synth, ...combined].slice(0, 6);
+      }
+    }
+    return combined;
+  }, [pantryInput, pantryIds, profile, remotePantryMatches]);
 
   if (!isOpen || !plan) return null;
 
@@ -145,12 +185,24 @@ export default function WeeklyPlannerModal({
 
   const activeDay = plan.days[activeDayIdx] || plan.days[0];
 
+  const persistExternalPantryFoods = async () => {
+    if (!onCacheExternalFood) return;
+    for (const id of pantryIds) {
+      const f = getFoodById(id);
+      if (f && (f.isAutoSynthesized || f.sourceRef === 'Open Food Facts')) {
+        await onCacheExternalFood(f);
+      }
+    }
+  };
+
   const handleApplyFullPlan = async () => {
+    await persistExternalPantryFoods();
     await onApplyPlanToJournalAndShopping(plan, missingToBuy);
     onClose();
   };
 
   const handleOnlyShopping = async () => {
+    await persistExternalPantryFoods();
     await onSendMissingOnlyToShopping(missingToBuy);
     onClose();
   };

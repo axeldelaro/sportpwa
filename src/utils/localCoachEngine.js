@@ -28,6 +28,7 @@ import {
   parsePantryTextToFoods,
   generateWeeklyMealPlan,
 } from './weeklyMealPlanner.js';
+import { resolveOrSynthesizeFood } from './universalFoodResolver.js';
 import {
   SCIENTIFIC_STUDIES,
   prewarmScientificIndex,
@@ -918,7 +919,9 @@ export function generateCoachResponse(userMessage, context = {}) {
     const cleanedFoodQ = cleanFoodSearchPhrase(
       norm.replace(/\b(recettes?|idees?|avec|autour|cuisiner|preparer|faire|que)\b/g, ' ')
     );
-    const matchedIng = cleanedFoodQ ? findFoodByQuery(cleanedFoodQ) : null;
+    const matchedIng = cleanedFoodQ
+      ? findFoodByQuery(cleanedFoodQ) || resolveOrSynthesizeFood(cleanedFoodQ, profile)
+      : null;
     if (matchedIng) {
       const varied = getVariedRecipesForFood(matchedIng, profile, [], 4);
       if (varied.length > 0) {

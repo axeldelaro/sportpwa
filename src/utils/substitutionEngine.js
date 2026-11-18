@@ -225,38 +225,61 @@ export function findFoodByQuery(rawQuery) {
     tortilla: 'tortilla_wrap_ble',
     parmesan: 'parmesan_reggiano',
     comte: 'comte_emmental',
+    'cordon bleu': 'cordon_bleu_volaille',
+    'cordons bleus': 'cordon_bleu_volaille',
+    nuggets: 'nuggets_volaille',
+    tenders: 'tenders_poulet',
+    gnocchi: 'gnocchis_pomme_de_terre',
+    gnocchis: 'gnocchis_pomme_de_terre',
+    ravioli: 'raviolis_frais_ricotta',
+    raviolis: 'raviolis_frais_ricotta',
+    lardons: 'lardons_volaille_fumes',
+    knacki: 'saucisse_volaille_knacki',
+    saucisse: 'saucisse_volaille_knacki',
   };
 
   if (directAliases[q]) {
     return getFoodById(directAliases[q]);
   }
 
+  const singToken = (w) => {
+    if (!w || w.length <= 3 || ['mais', 'pois', 'noix', 'radis', 'frais', 'houmous', 'couscous', 'ananas'].includes(w)) {
+      return w;
+    }
+    if (w.endsWith('eaux')) return w.slice(0, -1);
+    if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+    return w;
+  };
+
+  const qSing = q.split(' ').map(singToken).join(' ');
+  const queryTokens = qSing.split(' ').filter((t) => t.length >= 2);
+
   let bestMatch = null;
   let bestScore = 0;
-  const queryTokens = q.split(' ').filter((t) => t.length >= 2);
 
   for (const food of getAllFoods()) {
-    const normName = normalizeText(food.name);
+    const normName = normalizeText(food.name).split(' ').map(singToken).join(' ');
+    const shortName = normalizeText(food.name.split('(')[0]).split(' ').map(singToken).join(' ');
     let score = 0;
 
-    if (normName === q) {
-      score = 100;
-    } else if (normName.startsWith(q)) {
-      score = 85;
-    } else if (normName.includes(q)) {
-      score = 70;
-    } else if (q.includes(normName.split(' ')[0]) && normName.split(' ')[0].length >= 4) {
-      score = 55;
+    if (normName === qSing || shortName === qSing) {
+      score = 110;
+    } else if (shortName.startsWith(qSing) || normName.startsWith(qSing)) {
+      score = 90;
+    } else if (normName.includes(qSing)) {
+      score = 75;
+    } else if (queryTokens.length > 0 && queryTokens.every((qt) => normName.includes(qt))) {
+      score = 68;
+    } else if (qSing.includes(shortName.split(' ')[0]) && shortName.split(' ')[0].length >= 4) {
+      score = 52;
     }
 
     for (const token of queryTokens) {
-      const singular = token.endsWith('s') && token.length > 3 ? token.slice(0, -1) : token;
-      if (normName.includes(token) || normName.includes(singular)) {
-        score += 20;
+      if (normName.includes(token)) {
+        score += 18;
       }
     }
 
-    // Préfère l'aliment "cru" de référence en cas d'égalité (ex: riz basmati cru)
     if (score > 0 && food.state === 'cru') {
       score += 2;
     }
@@ -267,7 +290,7 @@ export function findFoodByQuery(rawQuery) {
     }
   }
 
-  return bestScore >= 20 ? bestMatch : null;
+  return bestScore >= 25 ? bestMatch : null;
 }
 
 /**

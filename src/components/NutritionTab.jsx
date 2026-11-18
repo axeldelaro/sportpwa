@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Copy,
   CalendarRange,
+  Share2,
 } from 'lucide-react';
 import {
   getAllFoods,
@@ -33,7 +34,16 @@ import { normalizeText } from '../utils/substitutionEngine';
 import {
   resolveDynamicRecipe,
   updateLoggedMealTitleOnSwap,
+  getVariedRecipesForFood,
 } from '../utils/foodRecipeSuggester';
+import {
+  normalizeFoodSingular,
+  resolveOrSynthesizeFood,
+  scoreFoodMatch,
+} from '../utils/universalFoodResolver';
+import { searchOpenFoodFacts } from '../utils/openFoodFactsService';
+import { registerExternalFoods } from '../data/foodDatabase';
+import { encodeShareUrl, triggerNativeOrClipboardShare } from '../utils/shareCodec';
 import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
 import SmartFoodPicker from './SmartFoodPicker';
@@ -129,6 +139,7 @@ export default function NutritionTab({
   const [drawerTab, setDrawerTab] = useState('recipes');
   const [portionMult, setPortionMult] = useState(1);
   const [recipeSearch, setRecipeSearch] = useState('');
+  const [remoteRecipeFood, setRemoteRecipeFood] = useState(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [exclusionMode, setExclusionMode] = useState('adapt'); // 'adapt' | 'hide'
   const [expandedRecipeId, setExpandedRecipeId] = useState(null);
@@ -194,9 +205,37 @@ export default function NutritionTab({
   const dayTotals = useMemo(() => computeDayTotals(dayLog), [dayLog]);
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES_DATA], [customRecipes]);
 
-  // Liste des recettes dynamiques (titre + étapes + ingrédients + macros mis à jour en temps réel !)
+  // Si l'utilisateur tape un aliment non pré-enregistré dans Recettes (ex: marque Open Food Facts), on enrichit aussi en arrière-plan
+  useEffect(() => {
+    const q = recipeSearch.trim();
+    if (q.length < 3) {
+      setRemoteRecipeFood(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchOpenFoodFacts(q, lang, controller.signal);
+        if (res && res.length > 0) {
+          registerExternalFoods([res[0]]);
+          setRemoteRecipeFood(res[0]);
+        }
+      } catch {
+        // Repli instantané hors-ligne via resolveOrSynthesizeFood
+      }
+    }, 380);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [recipeSearch, lang]);
+
+  // Liste des recettes dynamiques + Génération automatique de 4 recettes variées pour TOUT aliment tapé (même non pré-enregistré !)
   const preparedRecipes = useMemo(() => {
-    return allRecipes
+    const qTrim = recipeSearch.trim();
+    const qSing = normalizeFoodSingular(qTrim);
+
+    const catalogMatches = allRecipes
       .map((rec) => {
         const strictlyCompatible = isRecipeCompatibleWithProfile(rec, profile);
         if (!strictlyCompatible && exclusionMode === 'hide' && !profile?.recipeOverrides?.[rec.id]) {
@@ -211,19 +250,42 @@ export default function NutritionTab({
       .filter(Boolean)
       .filter((rec) => {
         if (onlyFavorites && !rec.isFavorite) return false;
-        if (recipeSearch.trim()) {
-          const q = normalizeText(recipeSearch);
-          const matchTitle = normalizeText(rec.title).includes(q);
+        if (qSing) {
+          const matchTitle = normalizeFoodSingular(rec.title).includes(qSing);
           const matchIng = (rec.ingredients || []).some((ing) => {
             const f = getFoodById(ing.foodId);
-            return f && normalizeText(f.name).includes(q);
+            return f && (normalizeFoodSingular(f.name).includes(qSing) || scoreFoodMatch(f, qTrim) >= 65);
           });
           if (!matchTitle && !matchIng) return false;
         }
         return true;
       })
       .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
-  }, [allRecipes, profile, exclusionMode, favoriteIds, onlyFavorites, recipeSearch]);
+
+    // Si peu ou pas de recettes existantes pour cet aliment (ex: "cordons bleus", "nuggets", "samoussas", "aligot"...),
+    // on résout ou synthétise l'aliment instantanément et on génère 4 recettes équilibrées par type de repas !
+    if (qTrim.length >= 2 && !onlyFavorites && catalogMatches.length < 4) {
+      const localOrSynth = resolveOrSynthesizeFood(qTrim, profile);
+      const targetFood =
+        localOrSynth && !localOrSynth.isAutoSynthesized
+          ? localOrSynth
+          : remoteRecipeFood || localOrSynth;
+
+      if (targetFood) {
+        const generated = getVariedRecipesForFood(targetFood, profile, customRecipes, 4)
+          .filter((g) => !catalogMatches.some((c) => normalizeFoodSingular(c.title) === normalizeFoodSingular(g.title)))
+          .map((g) => ({
+            ...g,
+            goalTag: `${g.slotBadge} · Sur-mesure`,
+            isGeneratedOnTheFly: true,
+            isFavorite: false,
+          }));
+        return [...catalogMatches, ...generated];
+      }
+    }
+
+    return catalogMatches;
+  }, [allRecipes, profile, exclusionMode, favoriteIds, onlyFavorites, recipeSearch, remoteRecipeFood, customRecipes]);
 
   const draftRecipeTotals = useMemo(
     () => computeRecipeMacros({ ingredients: customDraftItems }, 1),
@@ -238,8 +300,19 @@ export default function NutritionTab({
       .slice(0, 12);
   }, [exclusionQuery, dislikedIds]);
 
-  const handleAddRecipeToMeal = (preparedRec) => {
+  const handleAddRecipeToMeal = async (preparedRec) => {
     if (!drawerMealSlot) return;
+
+    // Persiste dans IndexedDB tout aliment synthétisé ou issu d'Open Food Facts utilisé dans la recette
+    if (onCacheExternalFood) {
+      for (const ing of preparedRec.ingredients || []) {
+        const f = getFoodById(ing.foodId);
+        if (f && (f.isAutoSynthesized || f.sourceRef === 'Open Food Facts')) {
+          await onCacheExternalFood(f);
+        }
+      }
+    }
+
     const scaledItems = (preparedRec.ingredients || []).map((ing) => ({
       foodId: ing.foodId,
       grams: Math.max(5, Math.round(ing.grams * portionMult)),
@@ -1113,13 +1186,34 @@ export default function NutritionTab({
                             )}
 
                             {rec.isCustom && (
-                              <button
-                                type="button"
-                                onClick={() => onDeleteCustomRecipe(rec.id)}
-                                className="p-2 text-[var(--text-muted)] hover:text-rose-400"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const url = encodeShareUrl('recipe', {
+                                      title: rec.title,
+                                      mealTypes: rec.mealTypes,
+                                      prepMinutes: rec.prepMinutes,
+                                      goalTag: rec.goalTag,
+                                      ingredients: rec.ingredients,
+                                      steps: rec.steps,
+                                    });
+                                    const res = await triggerNativeOrClipboardShare(rec.title, url);
+                                    if (res === 'copied') triggerToast('Lien recette copié');
+                                  }}
+                                  className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                  title="Partager cette recette"
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteCustomRecipe(rec.id)}
+                                  className="p-2 text-[var(--text-muted)] hover:text-rose-400"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
 
                             <button
@@ -1547,6 +1641,7 @@ export default function NutritionTab({
         lang={lang}
         profile={profile}
         customRecipes={customRecipes}
+        onCacheExternalFood={onCacheExternalFood}
         onApplyPlanToJournalAndShopping={async (plan, missingToBuy) => {
           if (onApplyWeeklyPlan) {
             await onApplyWeeklyPlan(plan, missingToBuy);
