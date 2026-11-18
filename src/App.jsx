@@ -375,8 +375,96 @@ export default function App() {
     );
   }, []);
 
+  const handleSaveRecipeOverride = useCallback((recipeId, overrideData) => {
+    if (!recipeId) return;
+    setProfile((prev) => {
+      const currentMap =
+        prev.recipeOverrides && typeof prev.recipeOverrides === 'object'
+          ? { ...prev.recipeOverrides }
+          : {};
+      if (!overrideData) {
+        delete currentMap[recipeId];
+      } else {
+        currentMap[recipeId] = overrideData;
+      }
+      return saveProfile({
+        ...prev,
+        recipeOverrides: currentMap,
+      });
+    });
+  }, []);
+
+  const handleCopyPreviousDayMeals = useCallback(
+    async (targetDateStr) => {
+      const d = new Date(targetDateStr + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      const prevDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const prevLog = await getNutritionLogByDate(prevDateStr);
+      const hasEntries = Object.values(prevLog?.meals || {}).some(
+        (arr) => Array.isArray(arr) && arr.length > 0
+      );
+      if (!hasEntries) return false;
+
+      const clonedMeals = {};
+      Object.entries(prevLog.meals).forEach(([slotKey, list]) => {
+        clonedMeals[slotKey] = (list || []).map((entry, idx) => ({
+          ...entry,
+          entryId: `meal_${Date.now()}_${slotKey}_${idx}`,
+        }));
+      });
+
+      await handleSaveDayLog({
+        date: targetDateStr,
+        meals: clonedMeals,
+      });
+      return true;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [todayStr]
+  );
+
   const handleStartWorkout = (workout, intensityMode = 'normal') => {
-    const preparedExercises = buildActiveWorkoutExercises(workout, intensityMode);
+    const rawPrepared = buildActiveWorkoutExercises(workout, intensityMode);
+    // Pré-remplit automatiquement les charges de la dernière séance + historique PR !
+    const preparedExercises = rawPrepared.map((ex) => {
+      let lastWeight = null;
+      let lastReps = null;
+      let bestPast1RM = 0;
+
+      for (const pastWk of workoutHistory || []) {
+        const matchEx = (pastWk.exercises || []).find(
+          (pe) => pe.id === ex.id || pe.name === ex.name
+        );
+        if (matchEx && Array.isArray(matchEx.setRows)) {
+          const doneSets = matchEx.setRows.filter((s) => s.completed);
+          if (doneSets.length > 0 && lastWeight === null) {
+            lastWeight = doneSets[0].weightKg;
+            lastReps = doneSets[0].reps;
+          }
+          doneSets.forEach((s) => {
+            if (Number(s.weightKg) > 0 && Number(s.reps) > 0) {
+              const est = Number(s.weightKg) * (1 + Number(s.reps) / 30);
+              if (est > bestPast1RM) bestPast1RM = est;
+            }
+          });
+        }
+      }
+
+      const shouldPrefillWeight =
+        ex.type === 'reps' && Number(lastWeight) > 0;
+
+      return {
+        ...ex,
+        bestPast1RM: Math.round(bestPast1RM * 10) / 10,
+        lastPerfLabel:
+          shouldPrefillWeight && lastReps
+            ? `${lastWeight}kg×${lastReps}`
+            : null,
+        setRows: shouldPrefillWeight
+          ? ex.setRows.map((row) => ({ ...row, weightKg: Number(lastWeight) }))
+          : ex.setRows,
+      };
+    });
     const session = {
       sessionId: `sess_${Date.now()}`,
       programId: workout.programId || 'custom',
@@ -610,7 +698,8 @@ export default function App() {
     if (!mealAction?.items?.length) return;
     const hour = new Date().getHours();
     const targetSlot =
-      hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 18 ? 'snack' : 'dinner';
+      mealAction.preferredSlot ||
+      (hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 18 ? 'snack' : 'dinner');
     const currentDay = await getNutritionLogByDate(todayStr);
     const entry = {
       entryId: `meal_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -714,6 +803,8 @@ export default function App() {
             profile={profile}
             onToggleDislikedFood={handleToggleDislikedFood}
             onToggleFavoriteRecipe={handleToggleFavoriteRecipe}
+            onSaveRecipeOverride={handleSaveRecipeOverride}
+            onCopyPreviousDayMeals={handleCopyPreviousDayMeals}
             customRecipes={customRecipes}
             onSaveCustomRecipe={handleSaveCustomRecipe}
             onDeleteCustomRecipe={handleDeleteCustomRecipe}
@@ -730,6 +821,8 @@ export default function App() {
             shoppingItems={shoppingItems}
             lang={lang}
             profile={profile}
+            customRecipes={customRecipes}
+            onQuickLogRecipe={handleLogMealFromCoach}
             onToggleItemChecked={handleToggleShoppingChecked}
             onUpdateItemGrams={handleUpdateShoppingGrams}
             onDeleteItem={handleDeleteShoppingItem}

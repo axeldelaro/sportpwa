@@ -19,8 +19,11 @@ import {
   computeSubstitutions,
   findFoodByQuery,
   roundToNearest5g,
-  getLiveAdaptedRecipe,
 } from './substitutionEngine.js';
+import {
+  resolveDynamicRecipe,
+  getVariedRecipesForFood,
+} from './foodRecipeSuggester.js';
 import {
   SCIENTIFIC_STUDIES,
   prewarmScientificIndex,
@@ -477,7 +480,7 @@ function tryComposeTargetedMealFromPrompt(userMessage, norm, profile) {
   if (!kcalMatch) return null;
 
   const targetKcal = Math.max(200, Math.min(1600, Number(kcalMatch[1])));
-  const adaptedPool = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter((r) =>
+  const adaptedPool = RECIPES_DATA.map((r) => resolveDynamicRecipe(r, profile)).filter((r) =>
     isRecipeCompatibleWithProfile(r, profile)
   );
   if (adaptedPool.length === 0) return null;
@@ -831,6 +834,45 @@ export function generateCoachResponse(userMessage, context = {}) {
     };
   }
 
+  // PRIORITÉ B0 : Demande d'idées de recettes autour d'un aliment précis (ex: "Recettes avec du citron / avocat / poulet")
+  if (
+    (norm.includes('recette') || norm.includes('cuisiner') || norm.includes('preparer') || norm.includes('recipe')) &&
+    !norm.includes('menu complet')
+  ) {
+    const cleanedFoodQ = cleanFoodSearchPhrase(
+      norm.replace(/\b(recettes?|idees?|avec|autour|cuisiner|preparer|faire|que)\b/g, ' ')
+    );
+    const matchedIng = cleanedFoodQ ? findFoodByQuery(cleanedFoodQ) : null;
+    if (matchedIng) {
+      const varied = getVariedRecipesForFood(matchedIng, profile, [], 4);
+      if (varied.length > 0) {
+        const lines = varied.map(
+          (v) =>
+            `• **[${v.slotBadge}] ${v.title}** *(${v.prepMinutes} min)* → **${v.macros.kcal} kcal** | ${v.macros.protein}g P · ${v.macros.carbs}g G · ${v.macros.fat}g L`
+        );
+        return {
+          text:
+            `**${varied.length} idées de recettes variées autour de « ${matchedIng.name} »** *(adaptées à ton profil)* :\n\n` +
+            lines.join('\n'),
+          mealAction: {
+            title: varied[1]?.title || varied[0].title,
+            kcal: (varied[1] || varied[0]).macros.kcal,
+            protein: (varied[1] || varied[0]).macros.protein,
+            items: (varied[1] || varied[0]).ingredients,
+            preferredSlot: (varied[1] || varied[0]).primarySlot,
+          },
+          sources: evidence,
+          suggestions: [
+            `Par quoi remplacer 100g de ${matchedIng.name} ?`,
+            'Menu complet calibré sur mes macros du jour',
+            'Combler mes protéines du jour',
+          ],
+          memory: { lastIntent: 'food_recipes', lastFoodId: matchedIng.id },
+        };
+      }
+    }
+  }
+
   // PRIORITÉ B : Solveur de repas à cible calorique précise (ex: "Repas du soir à 650 kcal")
   const targetedMealReply = tryComposeTargetedMealFromPrompt(userMessage, norm, profile);
   if (targetedMealReply) {
@@ -894,7 +936,7 @@ export function generateCoachResponse(userMessage, context = {}) {
   }
 
   if (intent === 'full_day_menu') {
-    const compatible = RECIPES_DATA.map((r) => getLiveAdaptedRecipe(r, profile)).filter((r) =>
+    const compatible = RECIPES_DATA.map((r) => resolveDynamicRecipe(r, profile)).filter((r) =>
       isRecipeCompatibleWithProfile(r, profile)
     );
     const pickSlot = (slot, shareKcal) => {

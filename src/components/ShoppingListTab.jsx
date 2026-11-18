@@ -6,6 +6,8 @@ import {
   ArrowLeftRight,
   Search,
   Globe,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import {
   AISLE_CATEGORIES,
@@ -15,6 +17,7 @@ import {
   isFoodCompatibleWithProfile,
 } from '../data/foodDatabase';
 import { normalizeText } from '../utils/substitutionEngine';
+import { getVariedRecipesForFood } from '../utils/foodRecipeSuggester';
 import { searchOpenFoodFacts } from '../utils/openFoodFactsService';
 import { tr } from '../i18n/translations';
 
@@ -22,6 +25,8 @@ export default function ShoppingListTab({
   shoppingItems = [],
   lang = 'fr',
   profile,
+  customRecipes = [],
+  onQuickLogRecipe,
   onToggleItemChecked,
   onUpdateItemGrams,
   onDeleteItem,
@@ -40,6 +45,12 @@ export default function ShoppingListTab({
   const [remoteFoods, setRemoteFoods] = useState([]);
   const [gramsInput, setGramsInput] = useState(150);
   const [toast, setToast] = useState(null);
+  const [recipeModalFood, setRecipeModalFood] = useState(null);
+
+  const modalSuggestions = useMemo(() => {
+    if (!recipeModalFood) return [];
+    return getVariedRecipesForFood(recipeModalFood, profile, customRecipes, 4);
+  }, [recipeModalFood, profile, customRecipes]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -399,6 +410,15 @@ export default function ShoppingListTab({
 
                               <button
                                 type="button"
+                                onClick={() => setRecipeModalFood(item.food)}
+                                className="p-2 rounded-full bg-[var(--bg-subtle)] text-emerald-400 border border-[var(--border-subtle)] transition-colors"
+                                title="Voir 4 idées recettes variées avec cet aliment"
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => handleOpenSwapForItem(item)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-subtle)] text-xs font-medium text-emerald-400 transition-colors"
                               >
@@ -423,6 +443,70 @@ export default function ShoppingListTab({
               </section>
             );
           })}
+        </div>
+      )}
+      {/* Tiroir 4 Recettes Variées pour l'aliment sélectionné dans les courses */}
+      {recipeModalFood && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-lg max-h-[85vh] card-elevated rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+              <div>
+                <span className="section-eyebrow !text-emerald-400">Idées par Repas</span>
+                <h3 className="text-sm font-bold text-[var(--text-primary)] mt-0.5">
+                  Recettes avec {recipeModalFood.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecipeModalFood(null)}
+                className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-secondary)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-4 space-y-2.5">
+              {modalSuggestions.map((sug) => (
+                <div
+                  key={sug.id}
+                  className="rounded-2xl bg-[var(--bg-subtle)]/65 border border-[var(--border-subtle)] p-4 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                      {sug.slotBadge} · {sug.prepMinutes} min
+                    </div>
+                    <h4 className="text-xs sm:text-sm font-bold text-[var(--text-primary)] mt-0.5">
+                      {sug.title}
+                    </h4>
+                    <p className="text-xs font-mono text-[var(--text-secondary)] mt-0.5">
+                      <strong>{sug.macros.kcal} kcal</strong> · {sug.macros.protein}g P ·{' '}
+                      {sug.macros.carbs}g G · {sug.macros.fat}g L
+                    </p>
+                  </div>
+
+                  {onQuickLogRecipe && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onQuickLogRecipe({
+                          title: sug.title,
+                          kcal: sug.macros.kcal,
+                          protein: sug.macros.protein,
+                          items: sug.ingredients,
+                          preferredSlot: sug.primarySlot,
+                        });
+                        setRecipeModalFood(null);
+                        showToast('Ajouté au journal du jour !');
+                      }}
+                      className="btn-accent !py-2 !px-3.5 !text-xs shrink-0"
+                    >
+                      + Repas
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

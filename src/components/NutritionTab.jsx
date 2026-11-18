@@ -14,6 +14,8 @@ import {
   Ban,
   RefreshCw,
   BookmarkPlus,
+  RotateCcw,
+  Copy,
 } from 'lucide-react';
 import {
   getAllFoods,
@@ -26,10 +28,11 @@ import {
   computeRecipeMacros,
   isRecipeCompatibleWithProfile,
 } from '../data/recipesData';
+import { normalizeText } from '../utils/substitutionEngine';
 import {
-  normalizeText,
-  getLiveAdaptedRecipe,
-} from '../utils/substitutionEngine';
+  resolveDynamicRecipe,
+  updateLoggedMealTitleOnSwap,
+} from '../utils/foodRecipeSuggester';
 import { getTodayDateString } from '../db/database';
 import { tr } from '../i18n/translations';
 import SmartFoodPicker from './SmartFoodPicker';
@@ -109,6 +112,8 @@ export default function NutritionTab({
   profile,
   onToggleDislikedFood,
   onToggleFavoriteRecipe,
+  onSaveRecipeOverride,
+  onCopyPreviousDayMeals,
   customRecipes = [],
   onSaveCustomRecipe,
   onDeleteCustomRecipe,
@@ -157,17 +162,15 @@ export default function NutritionTab({
   const dayTotals = useMemo(() => computeDayTotals(dayLog), [dayLog]);
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES_DATA], [customRecipes]);
 
-  // Liste des recettes dynamiques (auto-mises à jour selon les exclusions du profil !)
+  // Liste des recettes dynamiques (titre + étapes + ingrédients + macros mis à jour en temps réel !)
   const preparedRecipes = useMemo(() => {
     return allRecipes
       .map((rec) => {
         const strictlyCompatible = isRecipeCompatibleWithProfile(rec, profile);
-        if (!strictlyCompatible && exclusionMode === 'hide') {
+        if (!strictlyCompatible && exclusionMode === 'hide' && !profile?.recipeOverrides?.[rec.id]) {
           return null;
         }
-        const liveRec = strictlyCompatible
-          ? { ...rec, swapsMade: [], hasAutoSwaps: false }
-          : getLiveAdaptedRecipe(rec, profile);
+        const liveRec = resolveDynamicRecipe(rec, profile);
         return {
           ...liveRec,
           isFavorite: favoriteIds.includes(rec.id),
@@ -347,14 +350,26 @@ export default function NutritionTab({
       initialGrams: item.grams,
       contextLabel: food.name,
       onConfirmSwap: ({ newFood, newGrams }) => {
+        let updatedRecipeId = null;
+        let updatedRecipeItems = null;
+
         const updatedSlot = (dayLog.meals[slotId] || []).map((entry) => {
           if (entry.entryId !== entryId) return entry;
+          const nextItems = entry.items.map((it, idx) =>
+            idx === itemIdx ? { foodId: newFood.id, grams: newGrams } : it
+          );
+          if (entry.recipeId) {
+            updatedRecipeId = entry.recipeId;
+            updatedRecipeItems = nextItems;
+          }
+          const nextTitle = entry.isRecipe
+            ? updateLoggedMealTitleOnSwap(entry.title, food.name, newFood.name)
+            : newFood.name;
+
           return {
             ...entry,
-            title: entry.isRecipe ? entry.title : newFood.name,
-            items: entry.items.map((it, idx) =>
-              idx === itemIdx ? { foodId: newFood.id, grams: newGrams } : it
-            ),
+            title: nextTitle,
+            items: nextItems,
           };
         });
 
@@ -362,7 +377,73 @@ export default function NutritionTab({
           ...dayLog,
           meals: { ...dayLog.meals, [slotId]: updatedSlot },
         });
-        triggerToast(`→ ${newGrams}g ${newFood.name}`);
+
+        // Synchronise également la recette correspondante pour qu'elle reste actualisée !
+        if (updatedRecipeId && onSaveRecipeOverride && !updatedRecipeId.startsWith('sug_')) {
+          const mult = 1;
+          const baseItems = updatedRecipeItems.map((it) => ({
+            foodId: it.foodId,
+            grams: Math.max(5, Math.round(it.grams / mult)),
+          }));
+          onSaveRecipeOverride(updatedRecipeId, {
+            ingredients: baseItems,
+            swaps: [{ swappedFrom: food.name, swappedTo: newFood.name }],
+          });
+        }
+
+        triggerToast(`Recette actualisée → ${newGrams}g ${newFood.name}`);
+      },
+    });
+  };
+
+  // Permet de remplacer un ingrédient directement sur une fiche recette du catalogue Recettes !
+  const handleSwapIngredientInCatalogRecipe = (rec, ingIdx, ing) => {
+    const food = getFoodById(ing.foodId);
+    if (!food || !onSaveRecipeOverride) return;
+
+    onOpenSubstitutionModal({
+      sourceFoodId: ing.foodId,
+      initialGrams: ing.grams,
+      contextLabel: `${rec.title} · ${food.name}`,
+      onConfirmSwap: ({ newFood, newGrams }) => {
+        const nextIngredients = (rec.ingredients || []).map((item, i) =>
+          i === ingIdx ? { foodId: newFood.id, grams: newGrams } : { foodId: item.foodId, grams: item.grams }
+        );
+        const prevSwaps = Array.isArray(profile?.recipeOverrides?.[rec.id]?.swaps)
+          ? profile.recipeOverrides[rec.id].swaps
+          : [];
+        const nextSwaps = [...prevSwaps, { swappedFrom: food.name, swappedTo: newFood.name }];
+
+        onSaveRecipeOverride(rec.id, {
+          ingredients: nextIngredients,
+          swaps: nextSwaps,
+        });
+
+        // Si cette recette est déjà présente dans le journal du jour, on l'actualise aussi en direct !
+        if (dayLog?.meals) {
+          let touchedDay = false;
+          const nextMeals = {};
+          Object.entries(dayLog.meals).forEach(([sId, entries]) => {
+            nextMeals[sId] = (entries || []).map((entry) => {
+              if (entry.recipeId !== rec.id) return entry;
+              touchedDay = true;
+              const mult = Number(entry.portionMultiplier) || 1;
+              return {
+                ...entry,
+                title: updateLoggedMealTitleOnSwap(entry.title, food.name, newFood.name),
+                items: nextIngredients.map((ni) => ({
+                  foodId: ni.foodId,
+                  grams: Math.max(5, Math.round(ni.grams * mult)),
+                })),
+              };
+            });
+          });
+          if (touchedDay) {
+            onSaveDayLog({ ...dayLog, meals: nextMeals });
+          }
+        }
+
+        triggerToast(`${rec.title} mise à jour avec ${newFood.name}`);
       },
     });
   };
@@ -508,6 +589,22 @@ export default function NutritionTab({
             style={{ width: `${kcalPct}%` }}
           />
         </div>
+
+        {dayTotals.kcal === 0 && onCopyPreviousDayMeals && (
+          <div className="pt-1 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await onCopyPreviousDayMeals(selectedDate);
+                triggerToast(ok ? 'Repas de la veille dupliqués' : 'Aucun repas enregistré la veille');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:underline"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Dupliquer mes repas de la veille
+            </button>
+          </div>
+        )}
       </section>
 
       {/* 3. REPAS DU JOUR */}
@@ -891,10 +988,10 @@ export default function NutritionTab({
                               <span className="text-emerald-400 font-medium">{rec.goalTag}</span>
                               <span>·</span>
                               <span>{rec.prepMinutes} min</span>
-                              {rec.hasAutoSwaps && (
+                              {(rec.hasAutoSwaps || rec.hasManualOverride) && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-emerald-400/15 text-emerald-400 text-[10px] font-semibold">
                                   <RefreshCw className="w-2.5 h-2.5" />
-                                  Adaptée à tes goûts
+                                  {rec.hasManualOverride ? 'Personnalisée' : 'Adaptée à tes goûts'}
                                 </span>
                               )}
                             </div>
@@ -978,33 +1075,69 @@ export default function NutritionTab({
                         </div>
 
                         {detailsOpen && (
-                          <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2">
-                            <div className="space-y-1">
+                          <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="section-eyebrow">
+                                Ingrédients modifiables en direct
+                              </span>
+                              {rec.hasManualOverride && onSaveRecipeOverride && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onSaveRecipeOverride(rec.id, null);
+                                    triggerToast('Recette originale rétablie');
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-emerald-400"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  Rétablir l’originale
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="space-y-1.5">
                               {(rec.ingredients || []).map((ing, idx) => {
                                 const f = getFoodById(ing.foodId);
                                 if (!f) return null;
                                 return (
                                   <div
                                     key={`${ing.foodId}_${idx}`}
-                                    className="flex items-center justify-between text-xs py-0.5"
+                                    className="flex items-center justify-between gap-2 text-xs py-1 px-2.5 rounded-xl bg-[var(--bg-app)]/50"
                                   >
-                                    <span className="text-[var(--text-primary)]">
-                                      <strong>{Math.round(ing.grams * portionMult)}g</strong>{' '}
+                                    <span className="text-[var(--text-primary)] truncate">
+                                      <strong className="font-mono">
+                                        {Math.round(ing.grams * portionMult)}g
+                                      </strong>{' '}
                                       {f.name}
                                     </span>
-                                    {onToggleDislikedFood && (
+
+                                    <div className="flex items-center gap-1.5 shrink-0">
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          onToggleDislikedFood(f.id);
-                                          triggerToast(`${f.name} exclu et remplacé !`);
-                                        }}
-                                        className="text-[10.5px] text-[var(--text-muted)] hover:text-rose-400 inline-flex items-center gap-1"
+                                        onClick={() =>
+                                          handleSwapIngredientInCatalogRecipe(rec, idx, ing)
+                                        }
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] font-semibold text-emerald-400"
+                                        title="Changer cet aliment dans la recette"
                                       >
-                                        <Ban className="w-3 h-3" />
-                                        Exclure
+                                        <ArrowLeftRight className="w-3 h-3" />
+                                        Changer
                                       </button>
-                                    )}
+
+                                      {onToggleDislikedFood && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            onToggleDislikedFood(f.id);
+                                            triggerToast(`${f.name} exclu et remplacé !`);
+                                          }}
+                                          className="p-1 text-[var(--text-muted)] hover:text-rose-400"
+                                          title="Exclure définitivement cet ingrédient"
+                                        >
+                                          <Ban className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -1026,16 +1159,18 @@ export default function NutritionTab({
               </div>
             )}
 
-            {/* ONGLET B : PANEL INTÉGRAL D'INGRÉDIENTS (250+ HORS-LIGNE + 3M+ EN LIGNE) */}
+            {/* ONGLET B : PANEL INTÉGRAL D'INGRÉDIENTS + 4 RECETTES PAR ALIMENT */}
             {drawerTab === 'foods' && (
               <div className="flex-1 overflow-y-auto p-4">
                 <SmartFoodPicker
                   profile={profile}
+                  customRecipes={customRecipes}
                   lang={lang}
                   onSelectFoodWithGrams={handleAddSingleFoodToSlot}
+                  onSelectRecipeSuggestion={handleAddRecipeToMeal}
                   onCacheExternalFood={onCacheExternalFood}
                   onToggleDislikedFood={onToggleDislikedFood}
-                  actionLabel="Ajouter au repas"
+                  actionLabel="Ajouter seul"
                 />
               </div>
             )}

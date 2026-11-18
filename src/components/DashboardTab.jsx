@@ -48,6 +48,7 @@ export default function DashboardTab({
   onStartWorkout,
   onResumeWorkout,
   onNavigateTab,
+  bodyMetrics = [],
   onLogWeight,
 }) {
   const [weightEditOpen, setWeightEditOpen] = useState(false);
@@ -172,6 +173,27 @@ export default function DashboardTab({
       setWeightEditOpen(false);
     }
   };
+
+  const weightTrend = useMemo(() => {
+    const pts = (bodyMetrics || []).filter((m) => Number(m.weightKg) > 0).slice(-8);
+    if (pts.length < 2) return null;
+    const vals = pts.map((p) => Number(p.weightKg));
+    const minW = Math.min(...vals);
+    const maxW = Math.max(...vals);
+    const span = Math.max(0.5, maxW - minW);
+    const svgPoints = vals
+      .map((v, idx) => {
+        const x = Math.round((idx / (vals.length - 1)) * 100);
+        const y = Math.round(22 - ((v - minW) / span) * 18);
+        return `${x},${y}`;
+      })
+      .join(' ');
+    const delta = Math.round((vals[vals.length - 1] - vals[0]) * 10) / 10;
+    return {
+      svgPoints,
+      deltaLabel: `${delta > 0 ? '+' : ''}${delta} kg`,
+    };
+  }, [bodyMetrics]);
 
   return (
     <div className="space-y-5 pb-10 animate-fade-in">
@@ -392,9 +414,31 @@ export default function DashboardTab({
 
           {!weightEditOpen ? (
             <>
-              <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
-                {profile?.weight || 74}
-                <span className="text-xs font-normal text-[var(--text-muted)] ml-1">kg</span>
+              <div>
+                <div className="flex items-baseline justify-between gap-1">
+                  <div className="text-2xl font-extrabold text-[var(--text-primary)] font-mono">
+                    {profile?.weight || 74}
+                    <span className="text-xs font-normal text-[var(--text-muted)] ml-1">kg</span>
+                  </div>
+                  {weightTrend && (
+                    <span className="text-[10.5px] font-mono font-bold text-emerald-400">
+                      {weightTrend.deltaLabel}
+                    </span>
+                  )}
+                </div>
+
+                {weightTrend && (
+                  <svg viewBox="0 0 100 26" className="w-full h-5 mt-1.5 overflow-visible">
+                    <polyline
+                      fill="none"
+                      stroke="var(--accent)"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={weightTrend.svgPoints}
+                    />
+                  </svg>
+                )}
               </div>
 
               <button

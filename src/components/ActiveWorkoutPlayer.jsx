@@ -11,6 +11,8 @@ import {
   Volume2,
   VolumeX,
   RefreshCw,
+  Trophy,
+  Disc,
 } from 'lucide-react';
 import {
   playTickBeep,
@@ -27,6 +29,21 @@ function formatClock(totalSec) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+function computePlatesPerSide(totalKg, barKg = 20) {
+  const num = Number(totalKg) || 0;
+  if (num <= barKg) return [];
+  let rem = Math.round(((num - barKg) / 2) * 100) / 100;
+  const standardPlates = [25, 20, 15, 10, 5, 2.5, 1.25];
+  const out = [];
+  for (const p of standardPlates) {
+    while (rem >= p - 0.01) {
+      out.push(p);
+      rem = Math.round((rem - p) * 100) / 100;
+    }
+  }
+  return out;
+}
+
 export default function ActiveWorkoutPlayer({
   session,
   onPersistSession,
@@ -38,6 +55,7 @@ export default function ActiveWorkoutPlayer({
   const [elapsedSec, setElapsedSec] = useState(session?.elapsedSec || 0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showSummary, setShowSummary] = useState(false);
+  const [showPlatesHelper, setShowPlatesHelper] = useState(false);
 
   const [restTimer, setRestTimer] = useState({
     active: false,
@@ -259,14 +277,31 @@ export default function ActiveWorkoutPlayer({
   };
 
   if (showSummary) {
+    const prAchievedList = exercises.filter((ex) => {
+      if (!ex.bestPast1RM || ex.bestPast1RM <= 0) return false;
+      const bestToday = Math.max(
+        0,
+        ...ex.setRows
+          .filter((s) => s.completed && Number(s.weightKg) > 0 && Number(s.reps) > 0)
+          .map((s) => Number(s.weightKg) * (1 + Number(s.reps) / 30))
+      );
+      return bestToday > ex.bestPast1RM + 0.5;
+    });
+
     return (
       <div className="fixed inset-0 z-50 bg-[var(--bg-app)] flex flex-col items-center justify-center p-6 animate-fade-in">
         <div className="w-full max-w-sm card-elevated p-7 text-center space-y-6">
           <div>
-            <span className="text-xs font-medium text-emerald-400">Séance validée</span>
-            <h2 className="text-xl font-bold text-[var(--text-primary)] mt-1">
+            <span className="section-eyebrow !text-emerald-400">Séance validée</span>
+            <h2 className="text-xl font-extrabold text-[var(--text-primary)] mt-1">
               {session.workoutTitle}
             </h2>
+            {prAchievedList.length > 0 && (
+              <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/15 border border-emerald-400/40 text-xs font-bold text-emerald-400">
+                <Trophy className="w-3.5 h-3.5" />
+                <span>{prAchievedList.length} Nouveau(x) Record(s) Personnel(s) !</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-2.5">
@@ -393,10 +428,45 @@ export default function ActiveWorkoutPlayer({
         <ExerciseMotionVisual exercise={currentExercise} size="hero" animated showAnatomy />
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
-            <span className="font-semibold text-emerald-400">{currentExercise.muscle}</span>
-            <span className="font-mono">Repos {currentExercise.restSeconds || 60}s</span>
+          <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+            <span className="font-semibold text-emerald-400 truncate">
+              {currentExercise.muscle}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {currentExercise.lastPerfLabel && (
+                <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                  Dern. {currentExercise.lastPerfLabel}
+                </span>
+              )}
+              <span className="font-mono">Repos {currentExercise.restSeconds || 60}s</span>
+              {currentExercise.type !== 'timed' &&
+                Number(currentExercise.setRows?.[0]?.weightKg || 0) >= 22.5 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPlatesHelper((v) => !v)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[10.5px] font-bold text-emerald-400"
+                    title="Calculateur de disques par côté (barre olympique 20 kg)"
+                  >
+                    <Disc className="w-3 h-3" />
+                    Disques
+                  </button>
+                )}
+            </div>
           </div>
+
+          {showPlatesHelper &&
+            currentExercise.type !== 'timed' &&
+            Number(currentExercise.setRows?.[0]?.weightKg || 0) >= 22.5 && (
+              <div className="px-3 py-2 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] flex items-center justify-between gap-2 animate-fade-in">
+                <span>Par côté (barre 20 kg) :</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {computePlatesPerSide(currentExercise.setRows[0].weightKg)
+                    .map((p) => `[${p}]`)
+                    .join(' ') || 'Barre nue'}
+                </span>
+              </div>
+            )}
+
           <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
             {currentExercise.name}
           </h3>

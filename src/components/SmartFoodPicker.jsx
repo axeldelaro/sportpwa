@@ -7,14 +7,19 @@ import {
   X,
   Plus,
   Ban,
+  Sparkles,
+  ChevronDown,
 } from 'lucide-react';
 import {
   getAllFoods,
+  getFoodById,
   calculateFoodMacros,
   isFoodCompatibleWithProfile,
   isFoodDislikedByProfile,
+  registerExternalFoods,
 } from '../data/foodDatabase';
 import { normalizeText } from '../utils/substitutionEngine';
+import { getVariedRecipesForFood } from '../utils/foodRecipeSuggester';
 import {
   searchOpenFoodFacts,
   fetchProductByBarcode,
@@ -34,8 +39,10 @@ const QUICK_GRAM_PRESETS = [15, 30, 50, 100, 150, 200];
 
 export default function SmartFoodPicker({
   profile,
+  customRecipes = [],
   lang = 'fr',
   onSelectFoodWithGrams,
+  onSelectRecipeSuggestion,
   onCacheExternalFood,
   onToggleDislikedFood,
   actionLabel = 'Ajouter',
@@ -50,6 +57,7 @@ export default function SmartFoodPicker({
 
   const [selectedFood, setSelectedFood] = useState(null);
   const [grams, setGrams] = useState(100);
+  const [showRecipeIdeas, setShowRecipeIdeas] = useState(false);
 
   // Recherche temps réel automatique Open Food Facts (3M+ produits) dès 2 lettres
   useEffect(() => {
@@ -64,11 +72,15 @@ export default function SmartFoodPicker({
     const timer = setTimeout(async () => {
       try {
         const found = await searchOpenFoodFacts(query.trim(), lang, controller.signal);
-        setRemoteFoods(
-          found.filter((f) => isFoodCompatibleWithProfile(f, profile)).slice(0, 12)
-        );
+        const compatible = found
+          .filter((f) => isFoodCompatibleWithProfile(f, profile))
+          .slice(0, 12);
+        if (compatible.length > 0) {
+          registerExternalFoods(compatible);
+        }
+        setRemoteFoods(compatible);
       } catch {
-        // Repli silencieux hors-ligne sur les 250+ aliments locaux
+        // Repli silencieux hors-ligne sur les 302+ aliments locaux
       } finally {
         setRemoteLoading(false);
       }
@@ -92,7 +104,7 @@ export default function SmartFoodPicker({
         : all;
 
     if (!query.trim()) {
-      return byGroup.slice(0, 80);
+      return byGroup.slice(0, 90);
     }
 
     const q = normalizeText(query);
@@ -128,6 +140,13 @@ export default function SmartFoodPicker({
     [activeFood, grams]
   );
 
+  // 4 suggestions de recettes variées par type de repas (Matin, Midi, Collation, Soir) pour l'aliment actif !
+  const foodRecipeSuggestions = useMemo(() => {
+    if (!activeFood || !onSelectRecipeSuggestion) return [];
+    registerExternalFoods([activeFood]);
+    return getVariedRecipesForFood(activeFood, profile, customRecipes, 4);
+  }, [activeFood, profile, customRecipes, onSelectRecipeSuggestion]);
+
   const handleBarcodeLookup = async (e) => {
     e.preventDefault();
     if (!barcodeVal.trim()) return;
@@ -135,6 +154,7 @@ export default function SmartFoodPicker({
     try {
       const prod = await fetchProductByBarcode(barcodeVal.trim());
       if (prod) {
+        registerExternalFoods([prod]);
         if (onCacheExternalFood) await onCacheExternalFood(prod);
         setSelectedFood(prod);
         setGrams(prod.defaultGrams || 100);
@@ -159,6 +179,14 @@ export default function SmartFoodPicker({
     onSelectFoodWithGrams(activeFood, cleanGrams);
   };
 
+  const handlePickSuggestedRecipe = async (sugRec) => {
+    if (!sugRec || !onSelectRecipeSuggestion) return;
+    if (activeFood?.sourceRef === 'Open Food Facts' && onCacheExternalFood) {
+      await onCacheExternalFood(activeFood);
+    }
+    onSelectRecipeSuggestion(sugRec);
+  };
+
   return (
     <div className="space-y-3">
       {/* Barre de recherche universelle + Code-barres */}
@@ -172,7 +200,7 @@ export default function SmartFoodPicker({
               setQuery(e.target.value);
               setSelectedFood(null);
             }}
-            placeholder="Chercher un ingrédient (citron, poulet, farine, yaourt...)"
+            placeholder="Chercher un aliment (citron, saumon, avocat, farine...)"
             className="input-dark !pl-10 !pr-8 !py-2.5 text-xs"
           />
           {query && (
@@ -207,7 +235,7 @@ export default function SmartFoodPicker({
             value={barcodeVal}
             onChange={(e) => setBarcodeVal(e.target.value)}
             placeholder="Code-barres EAN-13 (ex: 3017620422003)"
-            className="input-dark !py-2 text-xs tabular-nums"
+            className="input-dark !py-2 text-xs font-mono"
           />
           <button type="submit" className="btn-accent !py-2 !px-3.5 !text-xs shrink-0">
             OK
@@ -215,7 +243,7 @@ export default function SmartFoodPicker({
         </form>
       )}
 
-      {/* Catégories prédéfinies glissables au pouce */}
+      {/* Catégories prédéfinies glissables */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
         {FOOD_GROUP_PILLS.map((pill) => {
           const active = groupFilter === pill.id;
@@ -227,9 +255,9 @@ export default function SmartFoodPicker({
                 setGroupFilter(pill.id);
                 setSelectedFood(null);
               }}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all ${
                 active
-                  ? 'bg-emerald-400 text-zinc-950 font-semibold'
+                  ? 'bg-emerald-400 text-zinc-950 font-bold'
                   : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
               }`}
             >
@@ -239,12 +267,12 @@ export default function SmartFoodPicker({
         })}
       </div>
 
-      {/* Liste combinée : Base Locale Instantanée (250+) + Base Mondiale Open Food Facts (3M+) */}
-      <div className={`${compact ? 'max-h-44' : 'max-h-56'} overflow-y-auto space-y-2 pr-1`}>
+      {/* Liste d'aliments */}
+      <div className={`${compact ? 'max-h-40' : 'max-h-48'} overflow-y-auto space-y-2 pr-1`}>
         {localFoods.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[10.5px] font-semibold text-[var(--text-muted)] px-1">
-              Panel hors-ligne certifié ({localFoods.length} aliments)
+            <p className="section-eyebrow px-1">
+              Panel hors-ligne ({localFoods.length})
             </p>
             {localFoods.map((f) => {
               const isSelected = activeFood?.id === f.id;
@@ -254,7 +282,7 @@ export default function SmartFoodPicker({
                   key={f.id}
                   className={`w-full px-3 py-2 rounded-2xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-semibold'
+                      ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-bold'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
                   }`}
                   onClick={() => {
@@ -264,17 +292,14 @@ export default function SmartFoodPicker({
                 >
                   <div className="min-w-0 flex-1 truncate">
                     <span>{f.name}</span>
-                    <span className="text-[10.5px] text-[var(--text-muted)] ml-1.5">
-                      ({f.state})
-                    </span>
                     {isDisliked && (
                       <span className="ml-1.5 text-[10px] text-rose-400">(Exclu)</span>
                     )}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
-                      {f.per100g.kcal} kcal · {f.per100g.protein}g P
+                    <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                      {f.per100g.kcal} kcal
                     </span>
                     {onToggleDislikedFood && (
                       <button
@@ -291,7 +316,7 @@ export default function SmartFoodPicker({
                         title={
                           isDisliked
                             ? 'Réautoriser cet ingrédient'
-                            : 'Je ne mange pas cet ingrédient (exclure)'
+                            : 'Je ne mange pas cet ingrédient'
                         }
                       >
                         <Ban className="w-3 h-3" />
@@ -306,9 +331,9 @@ export default function SmartFoodPicker({
 
         {(remoteLoading || remoteFoods.length > 0) && (
           <div className="space-y-1 pt-2 border-t border-[var(--border-subtle)]">
-            <p className="text-[10.5px] font-semibold text-emerald-400 px-1 flex items-center gap-1.5">
+            <p className="text-[10.5px] font-bold text-emerald-400 px-1 flex items-center gap-1.5">
               <Globe className="w-3 h-3" />
-              <span>Détection en direct (3M+ Open Food Facts)</span>
+              <span>Base mondiale Open Food Facts (3M+)</span>
               {remoteLoading && <Loader2 className="w-3 h-3 animate-spin" />}
             </p>
             {remoteFoods.map((f) => {
@@ -323,43 +348,30 @@ export default function SmartFoodPicker({
                   }}
                   className={`w-full text-left px-3 py-2 rounded-2xl text-xs flex items-center justify-between gap-2 transition-all ${
                     isSelected
-                      ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-semibold'
+                      ? 'bg-emerald-400/15 border border-emerald-400/40 text-[var(--text-primary)] font-bold'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
                   }`}
                 >
-                  <span className="truncate flex items-center gap-1.5">
-                    {f.nutriscore && (
-                      <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-400/20 text-emerald-400">
-                        {f.nutriscore}
-                      </span>
-                    )}
-                    <span className="truncate">{f.name}</span>
-                  </span>
-                  <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0">
-                    {f.per100g.kcal} kcal · {f.per100g.protein}g P
+                  <span className="truncate">{f.name}</span>
+                  <span className="text-[11px] text-[var(--text-muted)] font-mono shrink-0">
+                    {f.per100g.kcal} kcal
                   </span>
                 </button>
               );
             })}
           </div>
         )}
-
-        {localFoods.length === 0 && !remoteLoading && remoteFoods.length === 0 && (
-          <p className="text-center py-6 text-xs text-[var(--text-muted)]">
-            Aucun ingrédient trouvé. Essaie un mot plus simple (ex: citron, fromage, riz).
-          </p>
-        )}
       </div>
 
-      {/* Panneau d'ajustement rapide spécial Smartphone (Grammages rapides + Macros live) */}
+      {/* Panneau aliment actif + Suggestions de 4 Recettes Variées par type de repas */}
       {activeFood && (
-        <div className="rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-3.5 space-y-2.5">
+        <div className="rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-3.5 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+              <p className="text-xs font-bold text-[var(--text-primary)] truncate">
                 {activeFood.name}
               </p>
-              <p className="text-[11px] text-[var(--text-muted)] tabular-nums mt-0.5">
+              <p className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
                 <strong className="text-emerald-400">{previewMacros.kcal} kcal</strong> ·{' '}
                 {previewMacros.protein}g P · {previewMacros.carbs}g G · {previewMacros.fat}g L
               </p>
@@ -372,22 +384,21 @@ export default function SmartFoodPicker({
                 max="2000"
                 value={grams}
                 onChange={(e) => setGrams(e.target.value)}
-                className="w-14 bg-transparent text-right text-xs font-bold text-[var(--text-primary)] tabular-nums focus:outline-none"
+                className="w-14 bg-transparent text-right text-xs font-bold font-mono text-[var(--text-primary)] focus:outline-none"
               />
               <span className="text-[11px] text-[var(--text-muted)] ml-1">g</span>
             </div>
           </div>
 
-          {/* Boutons grammage 1-tap ergonomiques au pouce */}
           <div className="flex items-center justify-between gap-1">
             {QUICK_GRAM_PRESETS.map((preset) => (
               <button
                 key={preset}
                 type="button"
                 onClick={() => setGrams(preset)}
-                className={`flex-1 py-1 rounded-lg text-[11px] font-medium tabular-nums transition-colors ${
+                className={`flex-1 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors ${
                   Number(grams) === preset
-                    ? 'bg-emerald-400/20 text-emerald-400 border border-emerald-400/40 font-semibold'
+                    ? 'bg-emerald-400/20 text-emerald-400 border border-emerald-400/40'
                     : 'bg-[var(--bg-app)]/60 text-[var(--text-secondary)]'
                 }`}
               >
@@ -396,14 +407,88 @@ export default function SmartFoodPicker({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="btn-accent w-full !py-2.5 !text-xs"
-          >
-            <Plus className="w-4 h-4" />
-            {actionLabel} ({Math.max(1, Math.round(Number(grams) || 100))}g)
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="btn-accent flex-1 !py-2.5 !text-xs"
+            >
+              <Plus className="w-4 h-4" />
+              {actionLabel} ({Math.max(1, Math.round(Number(grams) || 100))}g)
+            </button>
+
+            {foodRecipeSuggestions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowRecipeIdeas((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl text-xs font-bold border transition-all shrink-0 ${
+                  showRecipeIdeas
+                    ? 'bg-emerald-400/20 border-emerald-400/50 text-emerald-400'
+                    : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-primary)]'
+                }`}
+                title="Voir 4 recettes variées utilisant cet aliment"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{foodRecipeSuggestions.length} Recettes</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    showRecipeIdeas ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+
+          {/* Tiroir dépliable : 4 recettes variées (Matin, Midi, Collation, Soir) autour de cet aliment */}
+          {showRecipeIdeas && foodRecipeSuggestions.length > 0 && (
+            <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2 animate-fade-in">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="section-eyebrow !text-emerald-400">
+                  Idées Recettes par Repas avec cet aliment
+                </span>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-0.5">
+                {foodRecipeSuggestions.map((sug) => (
+                  <div
+                    key={sug.id}
+                    className="rounded-2xl bg-[var(--bg-app)]/85 border border-[var(--border-subtle)] p-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                        <span>{sug.slotBadge}</span>
+                        <span className="text-[var(--text-muted)]">· {sug.prepMinutes} min</span>
+                      </div>
+                      <h5 className="text-xs font-bold text-[var(--text-primary)] mt-0.5 line-clamp-1">
+                        {sug.title}
+                      </h5>
+                      <p className="text-[11px] font-mono text-[var(--text-secondary)] mt-0.5">
+                        <strong>{sug.macros.kcal} kcal</strong> · {sug.macros.protein}g P ·{' '}
+                        {sug.macros.carbs}g G · {sug.macros.fat}g L
+                      </p>
+                      <p className="text-[10.5px] text-[var(--text-muted)] truncate mt-0.5">
+                        {sug.ingredients
+                          .map((ing) => {
+                            const f = getFoodById(ing.foodId);
+                            return f ? `${ing.grams}g ${f.name.split('(')[0].trim()}` : '';
+                          })
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePickSuggestedRecipe(sug)}
+                      className="btn-primary !py-2 !px-3 !text-xs shrink-0"
+                    >
+                      Choisir
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

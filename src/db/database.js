@@ -149,6 +149,7 @@ export const DEFAULT_PROFILE = (() => {
     dislikedFoodIds: [],
     favoriteRecipeIds: [],
     preferredEquipment: [],
+    recipeOverrides: {},
     manualTargets: false,
     targets: {
       kcal: computed.kcal,
@@ -186,6 +187,10 @@ export function loadProfile() {
       preferredEquipment: Array.isArray(parsed.preferredEquipment)
         ? parsed.preferredEquipment
         : [],
+      recipeOverrides:
+        parsed.recipeOverrides && typeof parsed.recipeOverrides === 'object'
+          ? parsed.recipeOverrides
+          : {},
     };
   } catch {
     return { ...DEFAULT_PROFILE };
